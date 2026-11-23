@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "viewpoint-navigator-window",
+  "name": "Viewpoint Navigator Window",
+  "description": "Opens the Viewpoint Navigator. Next window: choose Navisworks clash report, Navisworks viewpoints or Revizto Excel - it shows what to export and where to save it.",
+  "kind": "script",
+  "ribbon": {
+    "panel": "Routines",
+    "buttonText": "Viewpoint\nWindow"
+  },
+  "inputs": [],
+  "readOnly": false,
+  "destructive": false,
+  "created": "2026-11-19T11:33:00Z",
+  "modified": "2026-11-23T10:00:00Z",
+  "script": {
+    "files": [
+      "Routine.cs"
+    ]
+  }
+}
