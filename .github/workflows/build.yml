@@ -11,6 +11,8 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -41,3 +43,28 @@ jobs:
         with:
           name: BIMRadar-ClashNavigator-Standalone
           path: dist/BIMRadar-ClashNavigator-Standalone.zip
+
+      - name: Publish unzipped build to test-build branch
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/test-build"
+          rm -rf "$OUT"
+          mkdir -p "$OUT/pyRevit"
+          cp -r dist/pyRevit/BIMRadar-ClashNavigator.extension "$OUT/pyRevit/BIMRadar-ClashNavigator.extension"
+          cp -r dist/Standalone "$OUT/Standalone"
+          {
+            echo "Commit: $GITHUB_SHA"
+            echo "Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          } > "$OUT/BUILD.txt"
+          cd "$OUT"
+          # Fresh repo with no .gitignore, so bin/ folders (and DLLs) are kept.
+          git init
+          git config user.name "github-actions[bot]"
+          git config user.email "41898799+github-actions[bot]@users.noreply.github.com"
+          git checkout -b test-build
+          git add -A
+          git commit -m "Test build ${GITHUB_SHA::7}"
+          git push --force https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git test-build

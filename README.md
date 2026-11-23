@@ -25,6 +25,8 @@ The first build only proves loading: it adds **BIMRadar > Review > Hello**, whic
    - **pyRevit:** unzip, add the unzipped folder in pyRevit Settings > Custom Extension Directories, then reload pyRevit.
    - **Standalone:** unzip, run `install.bat`, then restart Revit.
 
+Test builds are also published unzipped on the `test-build` branch (latest main build).
+
 ## Status
 
 Being ported from the AICon routine `viewpoint-navigator-window` (kept in [`reference-source/`](reference-source/)).
