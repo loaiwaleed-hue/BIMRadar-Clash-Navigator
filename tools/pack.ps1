@@ -42,6 +42,15 @@ $saDir = Join-Path $dist 'Standalone'
 New-Item -ItemType Directory -Path $saDir | Out-Null
 Copy-Item (Join-Path $root 'installer/BIMRadar.ClashNavigator.addin') $saDir
 Copy-Item (Join-Path $root 'installer/install.bat') $saDir
+Copy-Item (Join-Path $root 'installer/uninstall.bat') $saDir
+$readme = @(
+    'BIMRadar Clash Navigator - standalone install',
+    '1. Close Revit, unzip this folder anywhere.',
+    '2. Double-click install.bat (per user, Revit 2022-2027; no admin needed).',
+    '3. Start Revit: BIMRadar tab > Review panel. Hidden if the pyRevit extension is registered.',
+    '4. To remove: double-click uninstall.bat.'
+)
+Set-Content -Path (Join-Path $saDir 'README.txt') -Value $readme -Encoding ASCII
 foreach ($tfm in $builds.Keys) {
     $src = Get-BuildDir $builds[$tfm]
     $dst = Join-Path $saDir $tfm

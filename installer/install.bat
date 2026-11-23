@@ -1,9 +1,11 @@
 @echo off
 setlocal EnableDelayedExpansion
-rem BIMRadar Clash Navigator - provisional installer (per-user, per Revit year).
+rem BIMRadar Clash Navigator - standalone installer (per user, per Revit year 2022-2027).
 set "SRC=%~dp0"
 set "ADDINS=%AppData%\Autodesk\Revit\Addins"
+set "PYCFG=%AppData%\pyRevit\pyRevit_config.ini"
 set "COUNT=0"
+set "LIST="
 
 for %%Y in (2022 2023 2024 2025 2026 2027) do (
   if exist "%ADDINS%\%%Y" (
@@ -17,16 +19,28 @@ for %%Y in (2022 2023 2024 2025 2026 2027) do (
       copy /Y "%SRC%BIMRadar.ClashNavigator.addin" "%ADDINS%\%%Y\" >nul
       copy /Y "%SRC%!TFM!\BIMRadar.ClashNavigator.dll" "%ADDINS%\%%Y\BIMRadar.ClashNavigator\" >nul
       if exist "%SRC%!TFM!\BIMRadar.ClashNavigator.pdb" copy /Y "%SRC%!TFM!\BIMRadar.ClashNavigator.pdb" "%ADDINS%\%%Y\BIMRadar.ClashNavigator\" >nul
-      echo Installed for Revit %%Y ^(!TFM!^) into %ADDINS%\%%Y
+      echo Installed for Revit %%Y ^(!TFM!^)
       set /a COUNT+=1
+      set "LIST=!LIST! %%Y"
     )
   )
 )
 
 echo.
+if exist "%PYCFG%" (
+  findstr /i /c:"BIMRadar-ClashNavigator.extension" "%PYCFG%" >nul 2>&1
+  if not errorlevel 1 (
+    echo WARNING: pyRevit_config.ini mentions BIMRadar-ClashNavigator.extension.
+    echo The add-in will stay hidden while the pyRevit extension is registered.
+    echo.
+  )
+)
+
+echo ---- Summary ----
 if "!COUNT!"=="0" (
-  echo No Revit 2022-2027 Addins folder found under %ADDINS%. Nothing installed.
+  echo No Revit 2022-2027 Addins folder found under !ADDINS!. Nothing installed.
 ) else (
-  echo Installed for !COUNT! Revit version^(s^). Restart Revit.
+  echo Installed for !COUNT! Revit version^(s^):!LIST!
+  echo Restart Revit.
 )
 pause

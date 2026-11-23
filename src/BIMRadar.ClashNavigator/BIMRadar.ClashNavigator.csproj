@@ -15,6 +15,7 @@
     <AssemblyName>BIMRadar.ClashNavigator</AssemblyName>
     <RootNamespace>BIMRadar.ClashNavigator</RootNamespace>
     <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF Condition="'$(TargetFramework)' != 'net48'">true</UseWPF>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
@@ -40,6 +41,10 @@
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
     <!-- ZipArchive (Revizto xlsx reader); not part of the default net48 references. -->
     <Reference Include="System.IO.Compression" />
+    <!-- WPF ImageSource for ribbon icons. -->
+    <Reference Include="PresentationCore" />
+    <Reference Include="WindowsBase" />
+    <Reference Include="System.Xaml" />
   </ItemGroup>
 
 </Project>
