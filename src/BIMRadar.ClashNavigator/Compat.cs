@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Autodesk.Revit.DB;
 
 namespace BIMRadar.ClashNavigator
 {
@@ -12,6 +13,14 @@ namespace BIMRadar.ClashNavigator
         public static string RuntimeDescription
         {
             get { return RuntimeInformation.FrameworkDescription; }
+        }
+
+        // ElementId from a number in every Revit version (2022/2023: int constructor, 2024+: long constructor)
+        public static ElementId Eid(long v)
+        {
+            var ctor = typeof(ElementId).GetConstructor(new[] { typeof(long) });
+            if (ctor != null) return (ElementId)ctor.Invoke(new object[] { v });
+            return (ElementId)typeof(ElementId).GetConstructor(new[] { typeof(int) }).Invoke(new object[] { (int)v });
         }
     }
 }

@@ -23,6 +23,8 @@
     <OutputPath>bin\$(Configuration)\$(RevitVersion)\</OutputPath>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <DebugType>portable</DebugType>
+    <!-- SYSLIB0014: WebClient (Revizto snapshots) is obsolete on net8+; CA1416: WinForms is Windows-only. -->
+    <NoWarn>$(NoWarn);SYSLIB0014;CA1416</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -36,6 +38,8 @@
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <!-- ZipArchive (Revizto xlsx reader); not part of the default net48 references. -->
+    <Reference Include="System.IO.Compression" />
   </ItemGroup>
 
 </Project>
