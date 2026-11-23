@@ -135,6 +135,13 @@ public class NavHandler : IExternalEventHandler {
     ApplyCategories(doc, v, keep);
   }
 
+  // #68: VP / work views open shaded at medium detail (skipped when a view template controls them; a refusal never breaks navigation)
+  static void ShadedMedium(View v) {
+    try { if (v.ViewTemplateId != ElementId.InvalidElementId) return; } catch (Exception) { return; }
+    try { v.DisplayStyle = DisplayStyle.Shading; } catch (Exception) { }
+    try { v.DetailLevel = ViewDetailLevel.Medium; } catch (Exception) { }
+  }
+
   // orthographic copy of the VP view to work in: same look direction, same section box (or one around the item), found elements isolated if Isolate is on
   string DuplicateOrtho(UIDocument uidoc, View3D tv, VpCam c) {
     var doc = uidoc.Document;
@@ -157,6 +164,7 @@ public class NavHandler : IExternalEventHandler {
       try { nv.SetCategoryHidden(sbCat, false); } catch (Exception) { }
       var o = tv.GetOrientation();
       nv.SetOrientation(new ViewOrientation3D(o.EyePosition, o.UpDirection, o.ForwardDirection));
+      ShadedMedium(nv);   // #68
       nv.CropBoxActive = false; nv.CropBoxVisible = false;
       if (tv.IsSectionBoxActive) { nv.SetSectionBox(tv.GetSectionBox()); nv.IsSectionBoxActive = true; }
       else {
@@ -165,7 +173,7 @@ public class NavHandler : IExternalEventHandler {
         var bb = new BoundingBoxXYZ(); bb.Min = new XYZ(p.X - h, p.Y - h, p.Z - h); bb.Max = new XYZ(p.X + h, p.Y + h, p.Z + h);
         nv.SetSectionBox(bb); nv.IsSectionBoxActive = true;
       }
-      ApplyIsolation(doc, nv, Hits, Isolated || c.IsClash);
+      ApplyIsolation(doc, nv, Hits, (Isolated && !Source.StartsWith("Revizto")) || c.IsClash);   // #69
       tx.Commit();
     }
     uidoc.ActiveView = nv;
@@ -310,7 +318,8 @@ public class NavHandler : IExternalEventHandler {
         if (Form != null && !Form.IsDisposed) Form.ShowMessage(msg);
         return;
       }
-      if (a == "Isolate") { Isolated = !Isolated; a = "Refresh"; }
+      if (a == "Isolate" && Source.StartsWith("Revizto")) { Isolated = false; a = "Refresh"; }   // #69: no isolation for Revizto issues
+      else if (a == "Isolate") { Isolated = !Isolated; a = "Refresh"; }
       if (a == "Duplicate") {
         if (tv == null || cur < 1 || cur > count) { if (Form != null && !Form.IsDisposed) Form.ShowError("Open a VP view first (click Next or Previous), then duplicate it."); return; }
         string made = DuplicateOrtho(uidoc, tv, Cams[cur - 1]);
@@ -350,6 +359,7 @@ public class NavHandler : IExternalEventHandler {
         }
         if (tv.Name != nm) { try { tv.Name = nm; } catch (Exception) { tv.Name = nm + " (" + tv.Id.ToString() + ")"; } }
         tv.SetOrientation(new ViewOrientation3D(c.Eye, c.Up, c.Fwd));
+        ShadedMedium(tv);   // #68
 
         // same field of view and picture shape as the source picture
         if (c.FovH > 0.01 && c.FovH < 3.0) {
@@ -407,7 +417,7 @@ public class NavHandler : IExternalEventHandler {
           tv.IsSectionBoxActive = false;
         }
         // clash: always only the clashing elements; Revizto: when "Isolate in 3D view" is on
-        ApplyIsolation(doc, tv, hits, Isolated || c.IsClash);
+        ApplyIsolation(doc, tv, hits, (Isolated && !Source.StartsWith("Revizto")) || c.IsClash);   // #69
         tx.Commit();
       }
 

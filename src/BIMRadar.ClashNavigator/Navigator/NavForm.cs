@@ -18,6 +18,7 @@ public class NavForm : WF.Form {
   readonly NavHandler H;
   readonly ExternalEvent Ev;
   WF.Label lblName, lblCount, lblInfo, lblPic;
+  WF.Label lblWhy1, lblWhy2;   // #70 / #71: anchor + search-match lines under the snapshot
   WF.Button btnPrev, btnNext, btnSnap, btnOpen, btnWeb;
   WF.PictureBox pic;
   WF.RadioButton rbBefore, rbAfter;
@@ -73,7 +74,7 @@ public class NavForm : WF.Form {
     ShowInTaskbar = true; // so a minimized window can be restored from the taskbar
     StartPosition = WF.FormStartPosition.Manual;
     var wa = WF.Screen.PrimaryScreen.WorkingArea;
-    int clientH = Math.Min(isClash ? 1048 : 968, wa.Height - 50);
+    int clientH = Math.Min(isClash ? 1082 : 1002, wa.Height - 50);
     ClientSize = new SD.Size(380, clientH);
     Location = new SD.Point(wa.Right - Width - 24, Math.Max(wa.Top, Math.Min(wa.Top + 30, wa.Bottom - Height)));
     Font = new SD.Font("Segoe UI", 9.5f);
@@ -131,7 +132,7 @@ public class NavForm : WF.Form {
     var lblSize = new WF.Label { Left = 170, Top = y + 3, Width = 110, Height = 20, Text = "Box size (m):" };
     num = new WF.NumericUpDown { Left = 280, Top = y - 1, Width = 88, DecimalPlaces = 1, Increment = 0.5m, Minimum = 0.5m, Maximum = 50m, Value = (decimal)Math.Min(50.0, Math.Max(0.5, H.BoxM)) };
     y += 32;
-    bool noIso = isVp || isClash;   // clashes are always isolated: no button
+    bool noIso = isVp || isClash || isRevizto;   // #69: Revizto too; clashes are always isolated: no button
     btnIso = new WF.Button { Left = 12, Top = y, Width = 176, Height = 34, Text = "Isolate in 3D view", Visible = !noIso, Enabled = false };
     btnSnap = new WF.Button { Left = noIso ? 12 : 192, Top = y, Width = noIso ? 356 : 176, Height = 34, Text = "Save solved snapshot", Font = new SD.Font("Segoe UI Semibold", 9.5f) };
     y += 40;
@@ -154,10 +155,13 @@ public class NavForm : WF.Form {
     rbBefore = new WF.RadioButton { Left = 12, Top = y, Width = 150, Height = 22, Text = H.Source.StartsWith("Revizto") ? "Revizto snapshot" : isClash ? "Clash picture" : "Navisworks", Checked = true };
     rbAfter = new WF.RadioButton { Left = 166, Top = y, Width = 150, Height = 22, Text = "Solved snapshot" };
     y += 26;
-    int picH = Math.Max(140, clientH - y - 40);
+    int picH = Math.Max(140, clientH - y - 74);   // #70/#71: 34 px more below for the why panel
     pic = new WF.PictureBox { Left = 12, Top = y, Width = 356, Height = picH, SizeMode = WF.PictureBoxSizeMode.Zoom, BorderStyle = WF.BorderStyle.FixedSingle, BackColor = SD.Color.FromArgb(30, 30, 30), Cursor = WF.Cursors.Hand };
     lblPic = new WF.Label { Left = 12, Top = y + picH + 4, Width = 356, Height = 32, ForeColor = SD.Color.Gray, Font = new SD.Font("Segoe UI", 8.5f), Text = "" };
-    if (y + picH + 40 > clientH) ClientSize = new SD.Size(380, y + picH + 40);
+    // #70 / #71: two small lines under the file-name line
+    lblWhy1 = new WF.Label { Left = 12, Top = y + picH + 38, Width = 356, Height = 16, Font = new SD.Font("Segoe UI", 8.5f), AutoEllipsis = true, ForeColor = SD.Color.Gray, Text = "" };
+    lblWhy2 = new WF.Label { Left = 12, Top = y + picH + 54, Width = 356, Height = 16, Font = new SD.Font("Segoe UI", 8.5f), AutoEllipsis = true, ForeColor = SD.Color.Gray, Text = "" };
+    if (y + picH + 74 > clientH) ClientSize = new SD.Size(380, y + picH + 74);
 
     var tip = new WF.ToolTip();
     tip.SetToolTip(btnSnap, "Exports the VP view's frame (same field of view as the source picture) to <picture>_after.jpg in:\n" + (H.PicDir ?? "") + "\nShortcut: Ctrl+S");
@@ -175,7 +179,7 @@ public class NavForm : WF.Form {
     tip.SetToolTip(btnDup, "Orthographic copy of this view (Work - VP-...): same direction and section box, all annotations off. Fix the issue there; the VP view stays for the snapshot.");
     tip.SetToolTip(cmbSt, "Action status (your own): Open / Closed / Need clarification / Action by others (another contractor has to act). The Revizto / clash status from the source is shown in the info line above and in Filter. Shared with the web navigator (navigator_status.json in the picture folder). New items start as Open.");
     Controls.AddRange(new WF.Control[] { lblName, lblCount, lblInfo, btnPrev, btnNext, lblModel, cmbModel, lblMS, txtMS, tagPanel, lblTest, cmbTest, lblSub, cmbSub, txtSub, cmbSubSt, cmbStamp, lblAct, cmb,
-      btnPick[0], lblItem[0], btnPick[1], lblItem[1], chk, lblSize, num, btnIso, btnSnap, btnDup, cmbSt, lblDone, btnWeb, btnOpen, lblCm, txtComment, btnPost, rbBefore, rbAfter, pic, lblPic });
+      btnPick[0], lblItem[0], btnPick[1], lblItem[1], chk, lblSize, num, btnIso, btnSnap, btnDup, cmbSt, lblDone, btnWeb, btnOpen, lblCm, txtComment, btnPost, rbBefore, rbAfter, pic, lblPic, lblWhy1, lblWhy2 });
 
     // model list: "All" first, then every model with its count; default = the model that matches the open file
     var groups = H.Cams.SelectMany(c => c.Models.Count > 0 ? c.Models : new List<string> { c.Model ?? "" }).GroupBy(m => m, StringComparer.OrdinalIgnoreCase).OrderBy(g => g.Key == "" ? "~" : g.Key, StringComparer.OrdinalIgnoreCase).ToList();
@@ -407,6 +411,7 @@ public class NavForm : WF.Form {
       ShowTagsHint();
     }
     SavePref();
+    if (curN > 0 && curN <= H.Cams.Count) ShowWhy(H.Cams[curN - 1]);   // #70: search changed
     if (CurrentKey() != appliedKey) {
       ApplyFilter(true);
       if (q != "") ShowMessage("Code \"" + q + "\": " + H.Order.Count + " " + sourceWord + " shown." + (tagOn.ContainsKey("U") && !tagOn["U"] ? " Not located: " + hitGroup.Count(kv => kv.Value == "U") + " (click the orange tag to add them)." : ""));
@@ -579,11 +584,34 @@ public class NavForm : WF.Form {
       if (pendingN != n) { txtComment.Text = st != null ? st.c : ""; SetCommentMode(txtComment.Text.Trim() == ""); }
       ShowDoneInfo(c);
       ShowHits();
+      ShowWhy(c);   // #70 / #71
       btnIso.Text = H.Isolated ? "Restore original view" : "Isolate in 3D view";
       btnIso.BackColor = H.Isolated ? SD.Color.FromArgb(255, 236, 179) : SD.Color.Empty; btnIso.UseVisualStyleBackColor = !H.Isolated;
       btnIso.Enabled = H.Isolated || (H.Cur == n && H.Hits.Any(x => x.Found));
       ShowPicture();
     } finally { syncing = false; }
+  }
+
+  // #70 / #71: line 1 = anchor model / zone (amber "Not anchored to a model" for a Revizto issue without anchor model),
+  // line 2 = why the item is in the list, from the search group (same keys as SearchGroup / BuildSearch)
+  void ShowWhy(VpCam c) {
+    string where = (c.Zone != "" ? " · zone " + c.Zone : "") + (c.Room != "" ? " · room " + c.Room : "");
+    var ms = (c.Models.Count > 0 ? c.Models : new List<string> { c.Model ?? "" }).Where(m => m != "").ToList();
+    if (isRevizto && (c.Model ?? "") == "") {   // #71
+      lblWhy1.ForeColor = SD.Color.FromArgb(214, 120, 30);
+      lblWhy1.Text = "Not anchored to a model" + where;
+    } else {
+      lblWhy1.ForeColor = SD.Color.Gray;
+      lblWhy1.Text = "Model: " + (ms.Count > 0 ? string.Join(", ", ms) : "none") + where;
+    }
+    string g;
+    if (modelPat != "" && hitGroup.TryGetValue(c.Index, out g)) {   // #70
+      lblWhy2.Text = g.StartsWith("M:") ? "Matched: anchor model " + g.Substring(2)
+        : g == "X" ? "Matched: zone/room (anchored to another model " + (ms.Count > 0 ? ms[0] : "") + ")"
+        : g == "Z" ? "Matched: zone " + c.Zone
+        : g == "R" ? "Matched: room " + c.Room
+        : "Not located";
+    } else lblWhy2.Text = "";
   }
 
   public void ShowSelection(int found, int total) {
