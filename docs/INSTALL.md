@@ -1,6 +1,6 @@
-# Install BIMRadar Clash Navigator
+# Install BIMRadar Clash Viewer
 
-**BIMRadar** is one Revit ribbon tab. Each tool adds its own panel. This repo adds the **Review** panel: a large **Clash Navigator** button and small **Next** and **Previous** buttons.
+**BIMRadar** is one Revit ribbon tab. Each tool adds its own panel. This repo adds the **Review** panel: a large **Clash Viewer** button and small **Next** and **Previous** buttons.
 
 ## Revit versions
 

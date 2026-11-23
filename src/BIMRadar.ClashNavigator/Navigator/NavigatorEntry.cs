@@ -151,7 +151,7 @@ public static class NavigatorEntry {
     }
 
     int shown = defaultModel == "" ? cams.Count : cams.Count(c => string.Equals(c.Model, defaultModel, StringComparison.OrdinalIgnoreCase) || c.Models.Any(m => string.Equals(m, defaultModel, StringComparison.OrdinalIgnoreCase)));
-    return "Viewpoint Navigator (" + sourceName + ") opened with " + cams.Count + " items from " + fromFile + (reportName != null ? " (pictures from " + reportName + ")" : "")
+    return "Clash Viewer (" + sourceName + ") opened with " + cams.Count + " items from " + fromFile + (reportName != null ? " (pictures from " + reportName + ")" : "")
       + (kind != "viewpoints" ? (defaultModel != "" ? ". Showing " + shown + " items of " + defaultModel : ". No model in the list matches " + doc.Title + ", showing all models") : "") + ". " + htmlMsg;
   }
 }

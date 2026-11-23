@@ -7,16 +7,16 @@ namespace BIMRadar.ClashNavigator
     /// <summary>Static entry points called by both the pyRevit buttons and the standalone add-in.</summary>
     public static class Launcher
     {
-        private const string DialogTitle = "BIMRadar · Clash Navigator";
+        private const string DialogTitle = "BIMRadar · Clash Viewer";
 
         public static void Hello(UIApplication uiapp)
         {
-            string text = "Clash Navigator loaded on Revit " + uiapp.Application.VersionNumber
+            string text = "Clash Viewer loaded on Revit " + uiapp.Application.VersionNumber
                 + " (" + Compat.RuntimeDescription + ")";
             TaskDialog.Show("BIMRadar", text);
         }
 
-        /// <summary>Opens the Clash Navigator window (modeless). Shows a dialog only on errors or when the window did not open.</summary>
+        /// <summary>Opens the Clash Viewer window (modeless). Shows a dialog only on errors or when the window did not open.</summary>
         public static void Open(UIApplication uiapp)
         {
             string result;
@@ -37,13 +37,13 @@ namespace BIMRadar.ClashNavigator
             }
         }
 
-        /// <summary>Steps the open Clash Navigator to the next item (same path as its Next button).</summary>
+        /// <summary>Steps the open Clash Viewer to the next item (same path as its Next button).</summary>
         public static void Next(UIApplication uiapp)
         {
             Step(true);
         }
 
-        /// <summary>Steps the open Clash Navigator to the previous item (same path as its Previous button).</summary>
+        /// <summary>Steps the open Clash Viewer to the previous item (same path as its Previous button).</summary>
         public static void Previous(UIApplication uiapp)
         {
             Step(false);
@@ -54,7 +54,7 @@ namespace BIMRadar.ClashNavigator
             NavForm form = NavForm.Instance;
             if (form == null || form.IsDisposed)
             {
-                TaskDialog.Show(DialogTitle, "Open Clash Navigator first.");
+                TaskDialog.Show(DialogTitle, "Open Clash Viewer first.");
                 return;
             }
 

@@ -72,7 +72,7 @@ public class NavForm : WF.Form {
     srcStatus = isClash || isRevizto;
     bool isVp = H.Source.StartsWith("Navisworks viewpoints");
     sourceWord = H.Source.StartsWith("Revizto") ? "issues" : isClash ? "clashes" : "viewpoints";
-    Text = "Viewpoint Navigator - " + H.Source;
+    Text = "BIMRadar Clash Viewer - " + H.Source;
     FormBorderStyle = WF.FormBorderStyle.FixedSingle;
     MinimizeBox = true; MaximizeBox = false;
     ShowInTaskbar = true; // so a minimized window can be restored from the taskbar
@@ -258,7 +258,7 @@ public class NavForm : WF.Form {
       string st = StKeys[cmbSt.SelectedIndex];
       NavData.SetState(H.Cams[curN - 1], st, null);
       ShowDoneInfo(H.Cams[curN - 1]);
-      if (st == "closed" && WF.MessageBox.Show(this, "Marked as Closed.\n\nSave the solved snapshot now (same camera as the VP view)?", "Viewpoint Navigator", WF.MessageBoxButtons.YesNo, WF.MessageBoxIcon.Question) == WF.DialogResult.Yes)
+      if (st == "closed" && WF.MessageBox.Show(this, "Marked as Closed.\n\nSave the solved snapshot now (same camera as the VP view)?", "BIMRadar Clash Viewer", WF.MessageBoxButtons.YesNo, WF.MessageBoxIcon.Question) == WF.DialogResult.Yes)
         Go("Snapshot", 0);
     };
     // comment: type, then Post (or Enter); Edit re-opens a posted comment. Text not posted is still kept when moving on.
@@ -574,7 +574,7 @@ public class NavForm : WF.Form {
   // called from the download thread when a picture has arrived
   public void PictureArrived(int index, int done, int total) {
     if (IsDisposed) return;
-    Text = "Viewpoint Navigator - " + H.Source + (done < total ? "  (downloading pictures " + done + "/" + total + ")" : "");
+    Text = "BIMRadar Clash Viewer - " + H.Source + (done < total ? "  (downloading pictures " + done + "/" + total + ")" : "");
     if (index == curN && !rbAfter.Checked) ShowPicture();
   }
 

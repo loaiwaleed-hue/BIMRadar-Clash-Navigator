@@ -155,7 +155,7 @@ public class NavHandler : IExternalEventHandler {
     string baseName = "Work - " + tv.Name, nm = baseName;
     for (int i = 2; names.Contains(nm); i++) nm = baseName + " (" + i + ")";
     View3D nv;
-    using (var tx = new Transaction(doc, "Viewpoint Navigator - orthographic work view")) {
+    using (var tx = new Transaction(doc, "Clash Viewer - orthographic work view")) {
       tx.Start();
       var vft = new FilteredElementCollector(doc).OfClass(typeof(ViewFamilyType)).Cast<ViewFamilyType>().First(t => t.ViewFamily == ViewFamily.ThreeDimensional);
       nv = View3D.CreateIsometric(doc, vft.Id);
@@ -457,7 +457,7 @@ public class NavHandler : IExternalEventHandler {
         upP = fwdP.CrossProduct(XYZ.BasisZ).CrossProduct(fwdP).Normalize();
       }
 
-      using (var tx = new Transaction(doc, "Viewpoint Navigator")) {
+      using (var tx = new Transaction(doc, "Clash Viewer")) {
         tx.Start();
         if (tv == null) {
           var vft = new FilteredElementCollector(doc).OfClass(typeof(ViewFamilyType)).Cast<ViewFamilyType>().First(t => t.ViewFamily == ViewFamily.ThreeDimensional);

@@ -1,9 +1,9 @@
-# BIMRadar · Clash Navigator
+# BIMRadar · Clash Viewer
 
 Part of **BIMRadar**, one Revit ribbon tab for model QA/QC, review and audit tools.
-This repo holds the **Clash Navigator**, which lives in the tab's **Review** panel.
+This repo holds the **Clash Viewer**, which lives in the tab's **Review** panel.
 
-Clash Navigator takes three kinds of coordination data into Revit and steps through them one item at a time:
+Clash Viewer takes three kinds of coordination data into Revit and steps through them one item at a time:
 
 | Source | What you export | What you get in Revit |
 |---|---|---|

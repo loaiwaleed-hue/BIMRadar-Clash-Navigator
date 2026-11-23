@@ -55,7 +55,7 @@ public class SourceDialog : WF.Form {
   }
 
   public SourceDialog(string preselect) {
-    Text = "Viewpoint Navigator - what are you opening?";
+    Text = "BIMRadar Clash Viewer - what are you opening?";
     FormBorderStyle = WF.FormBorderStyle.FixedDialog; MinimizeBox = false; MaximizeBox = false;
     StartPosition = WF.FormStartPosition.CenterParent;
     ClientSize = new SD.Size(540, 378);

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Shared loader for the BIMRadar Clash Navigator pyRevit buttons.
+"""Shared loader for the BIMRadar Clash Viewer pyRevit buttons.
 
 IronPython 2.7 compatible. Usage in a button script:
 

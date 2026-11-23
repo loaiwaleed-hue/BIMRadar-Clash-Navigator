@@ -1,6 +1,6 @@
 {
   "name": "BIMRadar-ClashNavigator",
-  "description": "BIMRadar Clash Navigator: steps through clash and issue data inside Revit.",
+  "description": "BIMRadar Clash Viewer: steps through clash and issue data inside Revit.",
   "author": "Loay Ahmed",
   "type": "extension",
   "url": "https://github.com/loaiwaleed-hue/BIMRadar-Clash-Navigator"

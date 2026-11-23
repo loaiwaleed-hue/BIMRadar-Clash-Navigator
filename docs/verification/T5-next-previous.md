@@ -5,7 +5,7 @@ Scope: this verifies the code path only (by reading the source). It does not ver
 ## Call path (Next)
 
 1. Ribbon button (pyRevit or add-in) calls `Launcher.Next(UIApplication)` in `Launcher.cs`.
-2. `Launcher.Next` calls `Step(true)`. If `NavForm.Instance` is null or `IsDisposed`, it shows the TaskDialog "Open Clash Navigator first." and returns (no exception).
+2. `Launcher.Next` calls `Step(true)`. If `NavForm.Instance` is null or `IsDisposed`, it shows the TaskDialog "Open Clash Viewer first." and returns (no exception).
 3. Otherwise `Step` calls `NavForm.GoNext()` inside try/catch (errors shown via `ex.Message`).
 4. `NavForm.GoNext()` is `Go("Next", 0)`. This is the same call the window's `btnNext.Click` handler and the Right / PageDown keys make.
 5. `NavForm.Go` runs `EnsureFilter()`, sets `H.Action`, `H.GoTo`, `H.UseBox`, `H.BoxM`, then calls `Ev.Raise()`.
