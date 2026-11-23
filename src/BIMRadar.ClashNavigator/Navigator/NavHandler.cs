@@ -33,6 +33,12 @@ public class NavHandler : IExternalEventHandler {
   public int PickIndex;                       // for "Pick": index into Hits
   public List<Hit> Hits = new List<Hit>();    // elements of the current item, as found in the open model / its links
 
+  // #72 / #73: what is at a Revizto issue's location (session cache, nothing written to Revizto data)
+  public class LocResult { public bool Empty; public string Summary = ""; public string Hint = ""; public double? OffsetM; }
+  public Dictionary<int, LocResult> Loc = new Dictionary<int, LocResult>();   // VpCam.Index -> result
+  public HashSet<int> EmptyIdx = new HashSet<int>();                          // VpCam.Index of issues with nothing at their location
+  public double OffsetLimit { get { return Math.Max(BoxM, 2.0); } }           // #73: more than this = "shared coordinates may differ"
+
   public class Hit {
     public string Model = ""; public int Id; public string Where = "";
     public ElementId Eid; public RevitLinkInstance Link;
@@ -65,7 +71,7 @@ public class NavHandler : IExternalEventHandler {
     return res;
   }
 
-  static BoundingBoxXYZ HitBox(Document doc, Hit h) {
+  internal static BoundingBoxXYZ HitBox(Document doc, Hit h) {
     if (!h.Found) return null;
     if (h.Link == null) { var e = doc.GetElement(h.Eid); return e == null ? null : e.get_BoundingBox(null); }
     var le = h.Link.GetLinkDocument().GetElement(h.Eid);
@@ -277,6 +283,72 @@ public class NavHandler : IExternalEventHandler {
     return ids;
   }
 
+  // #72: section box of a Revizto / viewpoint item (plane cut, or around the issue point); null = no box. Numbers unchanged from the inline code in Execute.
+  BoundingBoxXYZ ReviztoBox(VpCam c) {
+    if (c.HasPlane) {
+      XYZ nrm = c.PlaneN;
+      XYZ bx = nrm;
+      XYZ by = Math.Abs(bx.Z) > 0.9 ? XYZ.BasisX : XYZ.BasisZ.CrossProduct(bx).Normalize();
+      XYZ bz = bx.CrossProduct(by).Normalize();
+      double dist = nrm.DotProduct(c.Target - c.PlanePt);
+      XYZ origin = c.Target - nrm.Multiply(dist);
+      double h = BoxM / FT / 2.0;
+      double depth = BoxM / FT;
+      if (dist > depth / 2.0) depth = dist + h;
+      var t = Transform.Identity;
+      t.Origin = origin; t.BasisX = bx; t.BasisY = by; t.BasisZ = bz;
+      var bb = new BoundingBoxXYZ();
+      bb.Transform = t;
+      bb.Min = new XYZ(0, -h, -h);
+      bb.Max = new XYZ(depth, h, h);
+      return bb;
+    }
+    if (c.HasPoint) {
+      double h = BoxM / FT / 2.0;
+      var bb = new BoundingBoxXYZ();
+      bool lookingDown = c.Eye.Z > c.Point.Z + 0.3 / FT && c.Fwd.Z < -0.2;
+      if (lookingDown) {
+        // Revizto issues sit on the section cut: top of the box at the issue point, camera outside (above) it,
+        // wide enough to fill the picture, Box size (min 3 m) deep
+        double reach = Math.Max(h, 2.0 * (c.Eye - c.Point).GetLength());
+        bb.Min = new XYZ(c.Point.X - reach, c.Point.Y - reach, c.Point.Z - Math.Max(BoxM, 3.0) / FT);
+        bb.Max = new XYZ(c.Point.X + reach, c.Point.Y + reach, c.Point.Z + 0.02 / FT);
+      } else {
+        // looking sideways: box of Box size around the issue point, grown so the camera stays inside
+        XYZ lo = new XYZ(c.Point.X - h, c.Point.Y - h, c.Point.Z - h), hi = new XYZ(c.Point.X + h, c.Point.Y + h, c.Point.Z + h);
+        double m = 0.5 / FT;
+        lo = new XYZ(Math.Min(lo.X, c.Eye.X - m), Math.Min(lo.Y, c.Eye.Y - m), Math.Min(lo.Z, c.Eye.Z - m));
+        hi = new XYZ(Math.Max(hi.X, c.Eye.X + m), Math.Max(hi.Y, c.Eye.Y + m), Math.Max(hi.Z, c.Eye.Z + m));
+        bb.Min = lo; bb.Max = hi;
+      }
+      return bb;
+    }
+    return null;
+  }
+
+  // #72 / #73: what is at the location of a Revizto issue. Read-only (call outside a transaction). Stores the result in Loc / EmptyIdx; null when it cannot be told.
+  LocResult ComputeLoc(Document doc, VpCam c, List<Hit> hits) {
+    try {
+      var box = ReviztoBox(c);
+      if (box == null) return null;
+      XYZ lo, hi;
+      LocationCheck.WorldBounds(box, out lo, out hi);
+      var inView = LocationCheck.ModelsNear(doc, lo, hi);
+      bool empty = inView.Sum(m => m.Count) == 0;
+      var near = inView;
+      double? off = null;
+      if (c.HasPoint) {
+        double h = BoxM / FT / 2.0;
+        near = LocationCheck.ModelsNear(doc, new XYZ(c.Point.X - h, c.Point.Y - h, c.Point.Z - h), new XYZ(c.Point.X + h, c.Point.Y + h, c.Point.Z + h));
+        off = LocationCheck.ElementOffset(doc, c, hits);
+      }
+      var r = new LocResult { Empty = empty, OffsetM = off, Summary = LocationCheck.Summary(near), Hint = LocationCheck.PickHint(empty, off, BoxM, near) };
+      Loc[c.Index] = r;
+      if (empty) EmptyIdx.Add(c.Index); else EmptyIdx.Remove(c.Index);
+      return r;
+    } catch (Exception) { return null; }
+  }
+
   string ViewName(int index, VpCam c) {
     string clean = System.Text.RegularExpressions.Regex.Replace(c.Name ?? "", @"[\\:{}\[\]|;<>?`~]", "-");
     int digits = Math.Max(2, Cams.Count.ToString().Length);
@@ -327,6 +399,17 @@ public class NavHandler : IExternalEventHandler {
         if (Form != null && !Form.IsDisposed) Form.ShowMessage(msg);
         return;
       }
+      if (a == "CheckAll") {   // #72: every navigable Revizto item, the view does not change
+        int n = 0, k = 0;
+        foreach (var cc in Cams) {
+          if (cc.IsClash || (!cc.HasPoint && !cc.HasPlane) || NotHere(cc, doc)) continue;
+          var r = ComputeLoc(doc, cc, FindHits(doc, cc));
+          if (r == null) continue;
+          n++; if (r.Empty) k++;
+        }
+        if (Form != null && !Form.IsDisposed) { Form.RefreshLoc(0); Form.ShowMessage("Checked " + n + " issues: " + k + " empty."); }
+        return;
+      }
       if (a == "Isolate" && Source.StartsWith("Revizto")) { Isolated = false; a = "Refresh"; }   // #69: no isolation for Revizto issues
       else if (a == "Isolate") { Isolated = !Isolated; a = "Refresh"; }
       if (a == "Duplicate") {
@@ -340,7 +423,7 @@ public class NavHandler : IExternalEventHandler {
       int tpos;
       if (a == "Goto") tpos = Math.Min(Math.Max(GoTo, 1), Order.Count) - 1;
       else if (a == "Prev") tpos = pos <= 0 ? Order.Count - 1 : pos - 1;
-      else if (a == "Refresh") tpos = pos < 0 ? 0 : pos;
+      else if (a == "Refresh" || a == "GotoElement") tpos = pos < 0 ? 0 : pos;
       else tpos = (pos < 0 || pos >= Order.Count - 1) ? 0 : pos + 1;
       int target = Order[tpos];
 
@@ -359,6 +442,20 @@ public class NavHandler : IExternalEventHandler {
       var hits = FindHits(doc, c);
       Hits = hits;
       if (c.IsClash) clashIds = ClashSetup(doc, c, hits, out clashBox);
+      // #73: Go to element: section box + camera around the first found element instead of the Revizto point
+      BoundingBoxXYZ gotoBox = null;
+      XYZ eyeP = c.Eye, fwdP = c.Fwd, upP = c.Up;
+      if (a == "GotoElement") {
+        var gh = hits.FirstOrDefault(x => x.Found && HitBox(doc, x) != null);
+        if (gh == null) { if (Form != null && !Form.IsDisposed) Form.ShowMessage("No element of this issue was found in the model."); return; }
+        XYZ glo, ghi;
+        gotoBox = ClashBox(doc, c, new List<Hit> { gh }, out glo, out ghi);
+        XYZ gc = (glo + ghi) * 0.5;
+        double gd = Math.Max((ghi - glo).GetLength(), 1.0 / FT);
+        eyeP = gc + new XYZ(1, -1, 0.9).Normalize() * (gd * 1.15);
+        fwdP = (gc - eyeP).Normalize();
+        upP = fwdP.CrossProduct(XYZ.BasisZ).CrossProduct(fwdP).Normalize();
+      }
 
       using (var tx = new Transaction(doc, "Viewpoint Navigator")) {
         tx.Start();
@@ -367,7 +464,7 @@ public class NavHandler : IExternalEventHandler {
           tv = View3D.CreatePerspective(doc, vft.Id);
         }
         if (tv.Name != nm) { try { tv.Name = nm; } catch (Exception) { tv.Name = nm + " (" + tv.Id.ToString() + ")"; } }
-        tv.SetOrientation(new ViewOrientation3D(c.Eye, c.Up, c.Fwd));
+        tv.SetOrientation(new ViewOrientation3D(eyeP, upP, fwdP));
         ShadedMedium(tv);   // #68
 
         // same field of view and picture shape as the source picture
@@ -381,47 +478,16 @@ public class NavHandler : IExternalEventHandler {
           tv.CropBoxActive = true;
         }
 
-        if (UseBox && clashBox != null) {
+        if (gotoBox != null) {
+          tv.SetSectionBox(gotoBox);
+          tv.IsSectionBoxActive = true;
+        } else if (UseBox && clashBox != null) {
           tv.SetSectionBox(clashBox);
           tv.IsSectionBoxActive = true;
-        } else if (UseBox && c.HasPlane) {
-          XYZ nrm = c.PlaneN;
-          XYZ bx = nrm;
-          XYZ by = Math.Abs(bx.Z) > 0.9 ? XYZ.BasisX : XYZ.BasisZ.CrossProduct(bx).Normalize();
-          XYZ bz = bx.CrossProduct(by).Normalize();
-          double dist = nrm.DotProduct(c.Target - c.PlanePt);
-          XYZ origin = c.Target - nrm.Multiply(dist);
-          double h = BoxM / FT / 2.0;
-          double depth = BoxM / FT;
-          if (dist > depth / 2.0) depth = dist + h;
-          var t = Transform.Identity;
-          t.Origin = origin; t.BasisX = bx; t.BasisY = by; t.BasisZ = bz;
-          var bb = new BoundingBoxXYZ();
-          bb.Transform = t;
-          bb.Min = new XYZ(0, -h, -h);
-          bb.Max = new XYZ(depth, h, h);
-          tv.SetSectionBox(bb);
-          tv.IsSectionBoxActive = true;
-        } else if (UseBox && c.HasPoint) {
-          double h = BoxM / FT / 2.0;
-          var bb = new BoundingBoxXYZ();
-          bool lookingDown = c.Eye.Z > c.Point.Z + 0.3 / FT && c.Fwd.Z < -0.2;
-          if (lookingDown) {
-            // Revizto issues sit on the section cut: top of the box at the issue point, camera outside (above) it,
-            // wide enough to fill the picture, Box size (min 3 m) deep
-            double reach = Math.Max(h, 2.0 * (c.Eye - c.Point).GetLength());
-            bb.Min = new XYZ(c.Point.X - reach, c.Point.Y - reach, c.Point.Z - Math.Max(BoxM, 3.0) / FT);
-            bb.Max = new XYZ(c.Point.X + reach, c.Point.Y + reach, c.Point.Z + 0.02 / FT);
-          } else {
-            // looking sideways: box of Box size around the issue point, grown so the camera stays inside
-            XYZ lo = new XYZ(c.Point.X - h, c.Point.Y - h, c.Point.Z - h), hi = new XYZ(c.Point.X + h, c.Point.Y + h, c.Point.Z + h);
-            double m = 0.5 / FT;
-            lo = new XYZ(Math.Min(lo.X, c.Eye.X - m), Math.Min(lo.Y, c.Eye.Y - m), Math.Min(lo.Z, c.Eye.Z - m));
-            hi = new XYZ(Math.Max(hi.X, c.Eye.X + m), Math.Max(hi.Y, c.Eye.Y + m), Math.Max(hi.Z, c.Eye.Z + m));
-            bb.Min = lo; bb.Max = hi;
-          }
-          tv.SetSectionBox(bb);
-          tv.IsSectionBoxActive = true;
+        } else if (UseBox) {
+          var rb = ReviztoBox(c);   // #72: box computed by a reusable method
+          if (rb != null) { tv.SetSectionBox(rb); tv.IsSectionBoxActive = true; }
+          else tv.IsSectionBoxActive = false;
         } else {
           tv.IsSectionBoxActive = false;
         }
@@ -442,7 +508,8 @@ public class NavHandler : IExternalEventHandler {
       var sel = hits.Where(x => x.Found && x.Link == null).Select(x => x.Eid).Distinct().ToList();
       if (sel.Count > 0) { try { uidoc.Selection.SetElementIds(sel); } catch (Exception) { } }
       Cur = target;
-      if (Form != null && !Form.IsDisposed) { Form.Sync(target); if (hits.Count > 0) Form.ShowSelection(hits.Count(x => x.Found), hits.Count); Form.ShowTime(sw.ElapsedMilliseconds); }
+      if (!c.IsClash && Source.StartsWith("Revizto") && a != "GotoElement") ComputeLoc(doc, c, hits);   // #72 / #73: read-only, after the commit
+      if (Form != null && !Form.IsDisposed) { Form.RefreshLoc(target); if (hits.Count > 0) Form.ShowSelection(hits.Count(x => x.Found), hits.Count); Form.ShowTime(sw.ElapsedMilliseconds); }
     } catch (Exception ex) {
       if (Form != null && !Form.IsDisposed) Form.ShowError(ex.Message);
     }

@@ -19,6 +19,10 @@ public class NavForm : WF.Form {
   readonly ExternalEvent Ev;
   WF.Label lblName, lblCount, lblInfo, lblPic;
   WF.Label lblWhy1, lblWhy2;   // #70 / #71: anchor + search-match lines under the snapshot
+  WF.Label lblWhy3, lblHint;   // #72 / #73: what is at the location (red when empty / grey summary) + yellow hint
+  WF.CheckBox chkHide;         // #72: Hide empty (Revizto)
+  WF.Button btnCheck, btnGoto; // #72: Check locations; #73: Go to element
+  int keepN = 0;               // item that stays in the list while Hide empty is on (the one just opened)
   WF.Button btnPrev, btnNext, btnSnap, btnOpen, btnWeb;
   WF.PictureBox pic;
   WF.RadioButton rbBefore, rbAfter;
@@ -74,7 +78,7 @@ public class NavForm : WF.Form {
     ShowInTaskbar = true; // so a minimized window can be restored from the taskbar
     StartPosition = WF.FormStartPosition.Manual;
     var wa = WF.Screen.PrimaryScreen.WorkingArea;
-    int clientH = Math.Min(isClash ? 1082 : 1002, wa.Height - 50);
+    int clientH = Math.Min(isClash ? 1082 : isRevizto ? 1080 : 1002, wa.Height - 50);
     ClientSize = new SD.Size(380, clientH);
     Location = new SD.Point(wa.Right - Width - 24, Math.Max(wa.Top, Math.Min(wa.Top + 30, wa.Bottom - Height)));
     Font = new SD.Font("Segoe UI", 9.5f);
@@ -119,6 +123,10 @@ public class NavForm : WF.Form {
       cmbSubSt.Items.AddRange(new object[] { "Open", "Closed", "Need clarification", "Action by others" });
     }
     y += 34;
+    // #72: Hide empty + Check locations (Revizto only)
+    chkHide = new WF.CheckBox { Left = 12, Top = y, Width = 108, Height = 24, Text = "Hide empty", Visible = isRevizto };
+    btnCheck = new WF.Button { Left = 124, Top = y - 1, Width = 244, Height = 26, Text = "Check locations", Visible = isRevizto };
+    if (isRevizto) y += 30;
     cmb = new WF.ComboBox { Left = 12, Top = y, Width = 356, DropDownStyle = WF.ComboBoxStyle.DropDownList, DropDownWidth = 520 };
     y += 36;
     for (int i = 0; i < 2; i++) {
@@ -137,6 +145,7 @@ public class NavForm : WF.Form {
     btnSnap = new WF.Button { Left = noIso ? 12 : 192, Top = y, Width = noIso ? 356 : 176, Height = 34, Text = "Save solved snapshot", Font = new SD.Font("Segoe UI Semibold", 9.5f) };
     y += 40;
     btnDup = new WF.Button { Left = 12, Top = y, Width = 356, Height = 32, Text = "Duplicate 3D view" };
+    btnGoto = new WF.Button { Left = 248, Top = y, Width = 120, Height = 32, Text = "Go to element", Visible = false };   // #73: shown only when an element is far from the point
     y += 38;
     var lblAct = new WF.Label { Left = 12, Top = y, Width = 84, Height = 16, ForeColor = SD.Color.DimGray, Font = new SD.Font("Segoe UI", 8.5f), Text = "Action status" };
     y += 16;
@@ -155,13 +164,16 @@ public class NavForm : WF.Form {
     rbBefore = new WF.RadioButton { Left = 12, Top = y, Width = 150, Height = 22, Text = H.Source.StartsWith("Revizto") ? "Revizto snapshot" : isClash ? "Clash picture" : "Navisworks", Checked = true };
     rbAfter = new WF.RadioButton { Left = 166, Top = y, Width = 150, Height = 22, Text = "Solved snapshot" };
     y += 26;
-    int picH = Math.Max(140, clientH - y - 74);   // #70/#71: 34 px more below for the why panel
+    int below = isRevizto ? 122 : 74;   // #70/#71: 34 px for the why lines; #72/#73: Revizto +48 for the location line and the hint
+    int picH = Math.Max(140, clientH - y - below);
     pic = new WF.PictureBox { Left = 12, Top = y, Width = 356, Height = picH, SizeMode = WF.PictureBoxSizeMode.Zoom, BorderStyle = WF.BorderStyle.FixedSingle, BackColor = SD.Color.FromArgb(30, 30, 30), Cursor = WF.Cursors.Hand };
     lblPic = new WF.Label { Left = 12, Top = y + picH + 4, Width = 356, Height = 32, ForeColor = SD.Color.Gray, Font = new SD.Font("Segoe UI", 8.5f), Text = "" };
     // #70 / #71: two small lines under the file-name line
     lblWhy1 = new WF.Label { Left = 12, Top = y + picH + 38, Width = 356, Height = 16, Font = new SD.Font("Segoe UI", 8.5f), AutoEllipsis = true, ForeColor = SD.Color.Gray, Text = "" };
     lblWhy2 = new WF.Label { Left = 12, Top = y + picH + 54, Width = 356, Height = 16, Font = new SD.Font("Segoe UI", 8.5f), AutoEllipsis = true, ForeColor = SD.Color.Gray, Text = "" };
-    if (y + picH + 74 > clientH) ClientSize = new SD.Size(380, y + picH + 74);
+    lblWhy3 = new WF.Label { Left = 12, Top = y + picH + 70, Width = 356, Height = 16, Font = new SD.Font("Segoe UI", 8.5f), AutoEllipsis = true, ForeColor = SD.Color.Gray, Text = "" };
+    lblHint = new WF.Label { Left = 12, Top = y + picH + 88, Width = 356, Height = 32, Font = new SD.Font("Segoe UI", 8.5f), ForeColor = SD.Color.FromArgb(90, 60, 0), BackColor = SD.Color.FromArgb(255, 243, 191), Visible = false, Text = "" };
+    if (y + picH + below > clientH) ClientSize = new SD.Size(380, y + picH + below);
 
     var tip = new WF.ToolTip();
     tip.SetToolTip(btnSnap, "Exports the VP view's frame (same field of view as the source picture) to <picture>_after.jpg in:\n" + (H.PicDir ?? "") + "\nShortcut: Ctrl+S");
@@ -179,7 +191,7 @@ public class NavForm : WF.Form {
     tip.SetToolTip(btnDup, "Orthographic copy of this view (Work - VP-...): same direction and section box, all annotations off. Fix the issue there; the VP view stays for the snapshot.");
     tip.SetToolTip(cmbSt, "Action status (your own): Open / Closed / Need clarification / Action by others (another contractor has to act). The Revizto / clash status from the source is shown in the info line above and in Filter. Shared with the web navigator (navigator_status.json in the picture folder). New items start as Open.");
     Controls.AddRange(new WF.Control[] { lblName, lblCount, lblInfo, btnPrev, btnNext, lblModel, cmbModel, lblMS, txtMS, tagPanel, lblTest, cmbTest, lblSub, cmbSub, txtSub, cmbSubSt, cmbStamp, lblAct, cmb,
-      btnPick[0], lblItem[0], btnPick[1], lblItem[1], chk, lblSize, num, btnIso, btnSnap, btnDup, cmbSt, lblDone, btnWeb, btnOpen, lblCm, txtComment, btnPost, rbBefore, rbAfter, pic, lblPic, lblWhy1, lblWhy2 });
+      btnPick[0], lblItem[0], btnPick[1], lblItem[1], chk, lblSize, num, btnIso, btnSnap, btnDup, cmbSt, lblDone, btnWeb, btnOpen, lblCm, txtComment, btnPost, rbBefore, rbAfter, pic, lblPic, lblWhy1, lblWhy2, lblWhy3, lblHint, chkHide, btnCheck, btnGoto });
 
     // model list: "All" first, then every model with its count; default = the model that matches the open file
     var groups = H.Cams.SelectMany(c => c.Models.Count > 0 ? c.Models : new List<string> { c.Model ?? "" }).GroupBy(m => m, StringComparer.OrdinalIgnoreCase).OrderBy(g => g.Key == "" ? "~" : g.Key, StringComparer.OrdinalIgnoreCase).ToList();
@@ -205,6 +217,12 @@ public class NavForm : WF.Form {
     btnSnap.Click += (s, e) => Go("Snapshot", 0);
     btnIso.Click += (s, e) => Go("Isolate", 0);
     btnDup.Click += (s, e) => Go("Duplicate", 0);
+    btnGoto.Click += (s, e) => Go("GotoElement", 0);   // #73
+    btnCheck.Click += (s, e) => { ShowMessage("Checking locations..."); Go("CheckAll", 0); };   // #72
+    chkHide.CheckedChanged += (s, e) => { if (!syncing) SubFilterChanged(); };   // #72
+    tip.SetToolTip(chkHide, "Hide issues that have nothing from this model at their location (found by visiting them or by Check locations). Issues not checked yet stay in the list.");
+    tip.SetToolTip(btnCheck, "Count model elements (this model and its links) at every issue's location, without changing the view.");
+    tip.SetToolTip(btnGoto, "Section box and camera around the element found by its Element ID, instead of the Revizto point.");
     btnOpen.Click += (s, e) => OpenFolder();
     btnWeb.Click += (s, e) => OpenWeb();
     rbBefore.CheckedChanged += (s, e) => ShowPicture();
@@ -507,7 +525,8 @@ public class NavForm : WF.Form {
       var c0 = H.Cams[i];
       bool okModel = InModel(c0, key);
       bool okTest = tkey == "" || (tkey == "\u0002open" ? c0.DefaultTest : c0.Test == tkey);
-      if (okModel && okTest && SubOk(c0)) H.Order.Add(i + 1);
+      bool okEmpty = !(chkHide != null && chkHide.Checked && H.EmptyIdx.Contains(c0.Index) && i + 1 != (keepN > 0 ? keepN : curN));   // #72
+      if (okModel && okTest && SubOk(c0) && okEmpty) H.Order.Add(i + 1);
     }
     syncing = true;
     try {
@@ -523,7 +542,7 @@ public class NavForm : WF.Form {
   public void GoPrevious() { Go("Prev", 0); }
 
   void Go(string action, int idx) {
-    if (action != "Goto" && action != "Snapshot" && EnsureFilter()) return; // model changed: already jumped to its first item
+    if (action != "Goto" && action != "Snapshot" && action != "CheckAll" && EnsureFilter()) return; // model changed: already jumped to its first item
     H.Action = action; H.GoTo = idx;
     H.UseBox = chk.Checked; H.BoxM = (double)num.Value;
     Ev.Raise();
@@ -557,6 +576,14 @@ public class NavForm : WF.Form {
     if (IsDisposed) return;
     Text = "Viewpoint Navigator - " + H.Source + (done < total ? "  (downloading pictures " + done + "/" + total + ")" : "");
     if (index == curN && !rbAfter.Checked) ShowPicture();
+  }
+
+  // #72 / #73: after the handler stored a location result: re-apply Hide empty (the item just opened stays), then redraw
+  public void RefreshLoc(int n) {
+    if (n < 1) n = curN;
+    if (n < 1 || n > H.Cams.Count) return;
+    if (chkHide.Checked) { keepN = n; try { ApplyFilter(false); } finally { keepN = 0; } }
+    Sync(n);
   }
 
   public void Sync(int n) {
@@ -612,6 +639,17 @@ public class NavForm : WF.Form {
         : g == "R" ? "Matched: room " + c.Room
         : "Not located";
     } else lblWhy2.Text = "";
+    // #72 / #73: third line = what is at the location; yellow hint; Go to element when an element is far from the point
+    NavHandler.LocResult lr = null;
+    if (isRevizto) H.Loc.TryGetValue(c.Index, out lr);
+    if (lr == null) lblWhy3.Text = "";
+    else if (lr.Empty) { lblWhy3.ForeColor = SD.Color.Firebrick; lblWhy3.Text = "Nothing from this model at this location"; }
+    else { lblWhy3.ForeColor = SD.Color.Gray; lblWhy3.Text = lr.Summary; }
+    string hint = lr == null ? "" : lr.Hint;
+    lblHint.Text = hint; lblHint.Visible = hint != "";
+    bool gt = lr != null && lr.OffsetM != null && lr.OffsetM.Value > H.OffsetLimit;
+    btnGoto.Visible = gt;
+    btnDup.Width = gt ? 232 : 356;
   }
 
   public void ShowSelection(int found, int total) {
