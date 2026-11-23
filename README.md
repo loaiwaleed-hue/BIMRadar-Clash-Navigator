@@ -16,6 +16,15 @@ It also has:
 - A **web navigator / report** saved next to the data, with Export report and Export Excel.
 - Status shared between Revit and the web page through `navigator_status.json`.
 
+## Try the Hello build
+
+The first build only proves loading: it adds **BIMRadar > Review > Hello**, which shows the Revit year and .NET runtime.
+
+1. Open the latest run on the [Actions](../../actions) tab and download the two artifacts, `BIMRadar-ClashNavigator-pyRevit` and `BIMRadar-ClashNavigator-Standalone`.
+2. Pick one route (never both):
+   - **pyRevit:** unzip, add the unzipped folder in pyRevit Settings > Custom Extension Directories, then reload pyRevit.
+   - **Standalone:** unzip, run `install.bat`, then restart Revit.
+
 ## Status
 
 Being ported from the AICon routine `viewpoint-navigator-window` (kept in [`reference-source/`](reference-source/)).

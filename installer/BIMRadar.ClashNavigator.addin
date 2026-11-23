@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>BIMRadar Clash Navigator</Name>
+    <Assembly>BIMRadar.ClashNavigator\BIMRadar.ClashNavigator.dll</Assembly>
+    <FullClassName>BIMRadar.ClashNavigator.Standalone.App</FullClassName>
+    <AddInId>7d3f2a1e-6c4b-4f8e-9a21-b5c0d7e4f912</AddInId>
+    <VendorId>BIMRadar</VendorId>
+    <VendorDescription>BIMRadar - github.com/loaiwaleed-hue/BIMRadar-Clash-Navigator</VendorDescription>
+  </AddIn>
+</RevitAddIns>

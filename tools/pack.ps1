@@ -1,0 +1,59 @@
+param(
+    [string]$Configuration = 'Release'
+)
+$ErrorActionPreference = 'Stop'
+
+$root = Resolve-Path (Join-Path $PSScriptRoot '..')
+$dist = Join-Path $root 'dist'
+$projDir = Join-Path $root 'src/BIMRadar.ClashNavigator'
+
+# tfm folder -> Revit year whose build output is used
+$builds = [ordered]@{ 'net48' = '2022'; 'net8' = '2025'; 'net10' = '2027' }
+$files = @('BIMRadar.ClashNavigator.dll', 'BIMRadar.ClashNavigator.pdb')
+
+function Get-BuildDir([string]$year) {
+    $dir = Join-Path $projDir "bin/$Configuration/$year"
+    if (-not (Test-Path (Join-Path $dir 'BIMRadar.ClashNavigator.dll'))) {
+        throw "Build output missing: $dir/BIMRadar.ClashNavigator.dll. Build RevitVersion=$year first."
+    }
+    return $dir
+}
+
+if (Test-Path $dist) { Remove-Item $dist -Recurse -Force }
+New-Item -ItemType Directory -Path $dist | Out-Null
+
+# ---- pyRevit ----
+$pyDir = Join-Path $dist 'pyRevit'
+$extDir = Join-Path $pyDir 'BIMRadar-ClashNavigator.extension'
+New-Item -ItemType Directory -Path $pyDir | Out-Null
+Copy-Item (Join-Path $root 'extension/BIMRadar-ClashNavigator.extension') $extDir -Recurse
+foreach ($tfm in $builds.Keys) {
+    $src = Get-BuildDir $builds[$tfm]
+    $dst = Join-Path $extDir "bin/$tfm"
+    New-Item -ItemType Directory -Path $dst -Force | Out-Null
+    foreach ($f in $files) {
+        $p = Join-Path $src $f
+        if (Test-Path $p) { Copy-Item $p $dst }
+    }
+}
+
+# ---- Standalone ----
+$saDir = Join-Path $dist 'Standalone'
+New-Item -ItemType Directory -Path $saDir | Out-Null
+Copy-Item (Join-Path $root 'installer/BIMRadar.ClashNavigator.addin') $saDir
+Copy-Item (Join-Path $root 'installer/install.bat') $saDir
+foreach ($tfm in $builds.Keys) {
+    $src = Get-BuildDir $builds[$tfm]
+    $dst = Join-Path $saDir $tfm
+    New-Item -ItemType Directory -Path $dst | Out-Null
+    foreach ($f in $files) {
+        $p = Join-Path $src $f
+        if (Test-Path $p) { Copy-Item $p $dst }
+    }
+}
+
+# ---- Zips ----
+Compress-Archive -Path $extDir -DestinationPath (Join-Path $dist 'BIMRadar-ClashNavigator-pyRevit.zip') -Force
+Compress-Archive -Path (Join-Path $saDir '*') -DestinationPath (Join-Path $dist 'BIMRadar-ClashNavigator-Standalone.zip') -Force
+
+Get-ChildItem $dist -Filter *.zip | ForEach-Object { Write-Host ("{0}  {1} bytes" -f $_.Name, $_.Length) }

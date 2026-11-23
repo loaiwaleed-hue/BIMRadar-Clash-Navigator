@@ -1,0 +1,43 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Build Revit 2022 (net48)
+        run: dotnet build src/BIMRadar.ClashNavigator/BIMRadar.ClashNavigator.csproj -c Release -p:RevitVersion=2022
+
+      - name: Build Revit 2025 (net8.0-windows)
+        run: dotnet build src/BIMRadar.ClashNavigator/BIMRadar.ClashNavigator.csproj -c Release -p:RevitVersion=2025
+
+      - name: Build Revit 2027 (net10.0-windows)
+        run: dotnet build src/BIMRadar.ClashNavigator/BIMRadar.ClashNavigator.csproj -c Release -p:RevitVersion=2027
+
+      - name: Pack zips
+        run: pwsh -File tools/pack.ps1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BIMRadar-ClashNavigator-pyRevit
+          path: dist/BIMRadar-ClashNavigator-pyRevit.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BIMRadar-ClashNavigator-Standalone
+          path: dist/BIMRadar-ClashNavigator-Standalone.zip
