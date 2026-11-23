@@ -4,14 +4,14 @@ These are the standing rules for every ticket. Read them before implementing any
 
 ## Product family
 - **BIMRadar** is ONE Revit ribbon tab. Every tool has its own repo, and each repo adds only its own panel or buttons to that tab.
-- Planned panels:
+- Panels, in this order (decided #47):
   - **Health**: model health, warnings
-  - **Check**: rule-based QA/QC, e.g. LOI
-  - **Fix**
+  - **Check**: rule-based QA/QC + data / parameter / COBie validation
+  - **Fix**: ID / type fixes, later family rename and more
   - **Review**: Clash Navigator, warnings navigator
-  - **Data**: parameters, COBie, asset register
   - **Audit**: ISO 19650 / BEP / client standards
-- Final panel names and icons are decided in the wayfinder Grill tickets. Until then, use these as working names.
+- Icons: line style, 32 px large / 16 px small, one accent colour per panel: Health red, Check green, Fix orange, Review blue, Audit dark grey.
+- This repo adds to **Review**: a large **Clash Navigator** button + small **Next ▸** / **◂ Previous** buttons (#48).
 - Each tool is public or private by the owner's choice, decided per tool. **This repo is PUBLIC** (MIT).
 - Sister repo: `loaiwaleed-hue/qaqc-checker` (private: LOI Compliance Report, Select IDs, Fix Element IDs, Fix Type Names). It moves under the BIMRadar tab in a later ticket in that repo.
 
@@ -26,10 +26,20 @@ These are the standing rules for every ticket. Read them before implementing any
 - Use synthetic samples only, in `samples/`. Real test data stays on the owner's PC (`samples-private/` is git-ignored).
 - History issues describe the problem generically, e.g. "a resort project", not the real project name.
 
-## Runtime (to be confirmed in wayfinder)
-- C#, Revit API. AICon tests so far: Revit 2022 + AICon 3.2.3. The owner also uses Revit 2024 and 2025.
-- Revit 2025+ runs .NET 8 and Revit ≤ 2024 runs .NET Framework 4.8. Version differences go through ONE compat place.
-- The navigator window is modeless (WinForms in AICon). Every model change goes through `ExternalEvent`.
+## Runtime (decided #49, #50, #51)
+- C#, Revit API, Revit **2022–2027**, three builds:
+  - **net48**: Revit 2022–2024
+  - **net8.0-windows**: Revit 2025–2026
+  - **net10.0-windows**: Revit 2027
+- **API compatibility:** check every Revit API member against each version on https://www.revitapidocs.com/ or https://rvtdocs.com/ (e.g. `/2027/`) before using it. Version differences go through ONE compat class.
+  - ElementId is 64-bit since 2024: never `IntegerValue`, build ids with the existing `Eid(long)`.
+  - Revit 2027 has add-in isolation (see #53).
+- Two install routes, one build:
+  - pyRevit extension: `BIMRadar.tab/Review.panel`
+  - standalone zip with `install.bat` / `uninstall.bat` (per-year Addins folder)
+  - never both panels at once
+- Settings: `%AppData%\BIMRadar\ClashNavigator`. Old `%AppData%\AICon\vpnav` files are copied over once on first run. `navigator_status.json` next to the data is unchanged.
+- The navigator window is modeless (WinForms). Every model change goes through `ExternalEvent` + named transactions, as in the routine.
 - Units: Revit internal feet (mm / 304.8).
 
 ## Process
