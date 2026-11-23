@@ -16,29 +16,32 @@ It also has:
 - A **web navigator / report** saved next to the data, with Export report and Export Excel.
 - Status shared between Revit and the web page through `navigator_status.json`.
 
-## Try the Hello build
+## Install
 
-The first build only proves loading: it adds **BIMRadar > Review > Hello**, which shows the Revit year and .NET runtime.
+Download the zip from the latest [Release](../../releases) and follow [docs/INSTALL.md](docs/INSTALL.md).
+There are two routes (pick one, never both): a **pyRevit extension** or a **standalone add-in** (`install.bat`).
+Supports Revit 2022 to 2027.
+Do not use "Code > Download ZIP": that is source only and has no DLL.
 
-1. Open the latest run on the [Actions](../../actions) tab and download the two artifacts, `BIMRadar-ClashNavigator-pyRevit` and `BIMRadar-ClashNavigator-Standalone`.
-2. Pick one route (never both):
-   - **pyRevit:** unzip, add the unzipped folder in pyRevit Settings > Custom Extension Directories, then reload pyRevit.
-   - **Standalone:** unzip, run `install.bat`, then restart Revit.
+## Test builds
 
-Test builds are also published unzipped on the `test-build` branch (latest main build).
+The `test-build` branch holds the latest `main` build, unzipped, for testers (`pyRevit/` and `Standalone/` folders, plus `BUILD.txt` with the commit).
+These are not releases and may be unfinished. Each CI run also keeps both builds as artifacts on the [Actions](../../actions) tab.
 
 ## Status
 
-Being ported from the AICon routine `viewpoint-navigator-window` (kept in [`reference-source/`](reference-source/)).
+The port from the AICon routine `viewpoint-navigator-window` (kept in [`reference-source/`](reference-source/)) is done and packaged.
+Version 0.1.0 is waiting for the owner's test in Revit before it is released.
 Work is tracked in [Issues](../../issues). The design map is the `wayfinder:map` issue.
 History issues (labelled `history`) record the 41 items found and solved during the AICon phase (19–23 Nov 2026).
 
-Planned delivery (see the wayfinder decisions):
+Delivery (see the wayfinder decisions):
 - a **pyRevit extension** that adds the Review panel to the **BIMRadar** tab, and
 - a **standalone Revit add-in** (`.addin` + DLL) for people without pyRevit,
 both built from the same C# code.
 
 - Project rules: [CONTEXT.md](CONTEXT.md)
+- Install guide: [docs/INSTALL.md](docs/INSTALL.md)
 - Changes: [CHANGELOG.md](CHANGELOG.md)
 
 License: [MIT](LICENSE)

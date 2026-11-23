@@ -37,15 +37,17 @@ jobs:
       - name: Pack zips
         run: pwsh -File tools/pack.ps1
 
+      # upload-artifact zips what it uploads, so upload the unzipped folders
+      # (the .zip files in dist/ are for the GitHub Release).
       - uses: actions/upload-artifact@v4
         with:
           name: BIMRadar-ClashNavigator-pyRevit
-          path: dist/BIMRadar-ClashNavigator-pyRevit.zip
+          path: dist/pyRevit
 
       - uses: actions/upload-artifact@v4
         with:
           name: BIMRadar-ClashNavigator-Standalone
-          path: dist/BIMRadar-ClashNavigator-Standalone.zip
+          path: dist/Standalone
 
       - name: Publish unzipped build to test-build branch
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -71,3 +73,27 @@ jobs:
           git add -A
           git commit -m "Test build ${GITHUB_SHA::7}"
           git push --force https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git test-build
+
+      - name: Release notes from CHANGELOG
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          # Section whose heading starts with "## <tag>" (up to the next "## ").
+          awk -v tag="## $TAG" 'index($0, tag) == 1 && (length($0) == length(tag) || substr($0, length(tag) + 1, 1) == " ") {f=1; next} /^## / {f=0} f' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          if [ ! -s "$RUNNER_TEMP/notes.md" ]; then
+            echo "Release $TAG. See docs/INSTALL.md for install steps." > "$RUNNER_TEMP/notes.md"
+          fi
+          {
+            echo
+            echo "Install: https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/docs/INSTALL.md"
+          } >> "$RUNNER_TEMP/notes.md"
+
+      - name: Create draft GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: dist/*.zip
+          body_path: ${{ runner.temp }}/notes.md
