@@ -36,5 +36,36 @@ namespace BIMRadar.ClashNavigator
                 TaskDialog.Show(DialogTitle, result);
             }
         }
+
+        /// <summary>Steps the open Clash Navigator to the next item (same path as its Next button).</summary>
+        public static void Next(UIApplication uiapp)
+        {
+            Step(true);
+        }
+
+        /// <summary>Steps the open Clash Navigator to the previous item (same path as its Previous button).</summary>
+        public static void Previous(UIApplication uiapp)
+        {
+            Step(false);
+        }
+
+        private static void Step(bool forward)
+        {
+            NavForm form = NavForm.Instance;
+            if (form == null || form.IsDisposed)
+            {
+                TaskDialog.Show(DialogTitle, "Open Clash Navigator first.");
+                return;
+            }
+
+            try
+            {
+                if (forward) form.GoNext(); else form.GoPrevious();
+            }
+            catch (Exception ex)
+            {
+                TaskDialog.Show(DialogTitle, ex.Message);
+            }
+        }
     }
 }

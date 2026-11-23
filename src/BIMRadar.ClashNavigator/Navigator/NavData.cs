@@ -15,8 +15,18 @@ namespace BIMRadar.ClashNavigator.Navigator
 public static class NavData {
   const double FT = 0.3048;
   static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
-  // T4: moves to %AppData%\BIMRadar\ClashNavigator
-  public static string AppDir { get { return System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AICon", "vpnav"); } }
+  static string _appDir;
+  public static string AppDir {
+    get {
+      if (_appDir == null) {
+        var roaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        _appDir = SettingsMigration.EnsureMigrated(
+          System.IO.Path.Combine(roaming, "BIMRadar", "ClashNavigator"),
+          System.IO.Path.Combine(roaming, "AICon", "vpnav"));
+      }
+      return _appDir;
+    }
+  }
 
   static XYZ Rot(double[] q, XYZ v) {
     double x = q[0], y = q[1], z = q[2], w = q[3];

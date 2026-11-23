@@ -514,6 +514,9 @@ public class NavForm : WF.Form {
     if (go && H.Order.Count > 0) { H.Cur = 0; Go("Goto", 1); }
   }
 
+  public void GoNext() { Go("Next", 0); }
+  public void GoPrevious() { Go("Prev", 0); }
+
   void Go(string action, int idx) {
     if (action != "Goto" && action != "Snapshot" && EnsureFilter()) return; // model changed: already jumped to its first item
     H.Action = action; H.GoTo = idx;
