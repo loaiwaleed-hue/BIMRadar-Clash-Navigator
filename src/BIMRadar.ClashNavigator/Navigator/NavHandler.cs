@@ -166,7 +166,11 @@ public class NavHandler : IExternalEventHandler {
       nv.SetOrientation(new ViewOrientation3D(o.EyePosition, o.UpDirection, o.ForwardDirection));
       ShadedMedium(nv);   // #68
       nv.CropBoxActive = false; nv.CropBoxVisible = false;
-      if (tv.IsSectionBoxActive) { nv.SetSectionBox(tv.GetSectionBox()); nv.IsSectionBoxActive = true; }
+      if (c.IsClash) {   // #74: clash work view: same clash box when Section box is on, none when off (isolation stays)
+        if (UseBox) { XYZ l0, h0; nv.SetSectionBox(ClashBox(doc, c, Hits, out l0, out h0)); nv.IsSectionBoxActive = true; }
+        else nv.IsSectionBoxActive = false;
+      }
+      else if (tv.IsSectionBoxActive) { nv.SetSectionBox(tv.GetSectionBox()); nv.IsSectionBoxActive = true; }
       else {
         XYZ p = c.HasPoint ? c.Point : c.Target;
         double h = Math.Max(BoxM, 1.0) / FT / 2.0;
@@ -242,22 +246,27 @@ public class NavHandler : IExternalEventHandler {
     return !string.IsNullOrEmpty(c.Model) && !ReviztoData.ModelMatches(c.Model, doc.Title);
   }
 
-  // clash: elements of the open model, section box around them (capped around the clash point), camera looking at it
+  // #74: section box of a clash: the clashing elements (host, and linked ones through the link transform) grown by Box size / 2
+  // on each side (min 0.5 m); no element found: Box size centred on the clash point. Same box for the VP view and the work view.
+  BoundingBoxXYZ ClashBox(Document doc, VpCam c, List<Hit> hits, out XYZ lo, out XYZ hi) {
+    var boxes = hits.Select(x => HitBox(doc, x)).Where(b => b != null).ToList();
+    double grow = Math.Max(BoxM / 2.0, 0.5) / FT;
+    XYZ p = c.Point;
+    if (boxes.Count == 0) {
+      double h = Math.Max(BoxM, 1.0) / FT / 2.0;
+      lo = new XYZ(p.X - h, p.Y - h, p.Z - h); hi = new XYZ(p.X + h, p.Y + h, p.Z + h);
+    } else {
+      lo = new XYZ(boxes.Min(b => b.Min.X) - grow, boxes.Min(b => b.Min.Y) - grow, boxes.Min(b => b.Min.Z) - grow);
+      hi = new XYZ(boxes.Max(b => b.Max.X) + grow, boxes.Max(b => b.Max.Y) + grow, boxes.Max(b => b.Max.Z) + grow);
+    }
+    var r = new BoundingBoxXYZ(); r.Min = lo; r.Max = hi; return r;
+  }
+
+  // clash: elements of the open model, section box around them (#74: grown by Box size / 2, not capped), camera looking at it
   List<ElementId> ClashSetup(Document doc, VpCam c, List<Hit> hits, out BoundingBoxXYZ box) {
     var ids = hits.Where(x => x.Found && x.Link == null).Select(x => x.Eid).Distinct().ToList();   // host elements to select
-    var boxes = hits.Select(x => HitBox(doc, x)).Where(b => b != null).ToList();
-    double pad = 0.3 / FT, cap = Math.Max(BoxM, 1.0) / FT;
-    XYZ p = c.Point;
-    XYZ lo = new XYZ(p.X - pad, p.Y - pad, p.Z - pad), hi = new XYZ(p.X + pad, p.Y + pad, p.Z + pad);
-    foreach (var bb in boxes) {
-      lo = new XYZ(Math.Min(lo.X, bb.Min.X - pad), Math.Min(lo.Y, bb.Min.Y - pad), Math.Min(lo.Z, bb.Min.Z - pad));
-      hi = new XYZ(Math.Max(hi.X, bb.Max.X + pad), Math.Max(hi.Y, bb.Max.Y + pad), Math.Max(hi.Z, bb.Max.Z + pad));
-    }
-    if (boxes.Count == 0) { lo = new XYZ(p.X - cap / 2, p.Y - cap / 2, p.Z - cap / 2); hi = new XYZ(p.X + cap / 2, p.Y + cap / 2, p.Z + cap / 2); }
-    // a long wall or a slab would give a huge box: keep it within Box size around the clash point
-    lo = new XYZ(Math.Max(lo.X, p.X - cap), Math.Max(lo.Y, p.Y - cap), Math.Max(lo.Z, p.Z - cap));
-    hi = new XYZ(Math.Min(hi.X, p.X + cap), Math.Min(hi.Y, p.Y + cap), Math.Min(hi.Z, p.Z + cap));
-    box = new BoundingBoxXYZ(); box.Min = lo; box.Max = hi;
+    XYZ lo, hi;
+    box = ClashBox(doc, c, hits, out lo, out hi);   // #74
     XYZ center = (lo + hi) * 0.5;
     double diag = Math.Max((hi - lo).GetLength(), 1.0 / FT);
     XYZ dir = new XYZ(1, -1, 0.9).Normalize();                    // from the south-east, above
