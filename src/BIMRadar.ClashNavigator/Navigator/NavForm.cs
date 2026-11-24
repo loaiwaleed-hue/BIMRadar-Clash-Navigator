@@ -619,7 +619,7 @@ public class NavForm : WF.Form {
         lblInfo.Text = "Navisworks section plane: " + kind + "; focus point is " + dist.ToString("0.00") + " m " + (dist >= 0 ? "inside" : "outside") + " the kept side.";
       } else if (!string.IsNullOrEmpty(c.Note)) lblInfo.Text = c.Note;
       else lblInfo.Text = "No section plane was saved for this viewpoint.";
-      if (c.IsClash) lblInfo.Text = (c.HasNavCam ? "Camera: from Navisworks viewpoint" : "Camera: fitted (no clash viewpoint found)") + ". " + lblInfo.Text;   // #23
+      if (c.IsClash && c.HasNavCam) lblInfo.Text = "Camera: from Navisworks viewpoint. " + lblInfo.Text;   // #23 (silent for the normal HTML-only workflow)
       var st = NavData.GetState(c);
       cmbSt.SelectedIndex = Math.Max(0, Array.IndexOf(StKeys, NavData.StatusOf(c)));
       if (pendingN != n) { txtComment.Text = st != null ? st.c : ""; SetCommentMode(txtComment.Text.Trim() == ""); }
