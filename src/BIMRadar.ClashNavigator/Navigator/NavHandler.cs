@@ -389,6 +389,9 @@ public class NavHandler : IExternalEventHandler {
   // #85: perspective camera fit for a clash. Last UIView rectangle (screen px) of a clash navigation: used for the overlap when no UIView is open yet.
   bool lastRectOk; int lastVL, lastVT, lastVR, lastVB;
   const double PerspHalfFov = 25.0 * Math.PI / 180.0;   // Revit's default perspective is about 50 degrees
+  // #87: separate horizontal / vertical half angles; learned from UIView.GetZoomCorners (exists in Revit 2022-2027, since 2011) and cached for the next clashes
+  double fovHx = PerspHalfFov, fovHy = PerspHalfFov; bool fovLearned;
+  XYZ fitEye, fitDir, fitUp, fitRight;   // #87: last fitted camera (eye after the overlap shift is NOT needed: the frustum is relative to the eye)
 
   // #85: new eye so the host item fills the view: target = clash point (else box centre), keep the current direction (c.Fwd / c.Up from ClashSetup),
   // d = max(1.5 m, r / tan(25 deg) * 1.1), eye = target - dir * d; then target and eye shift sideways by w * f / 2 (w = 2 d tan 25 deg)
@@ -401,16 +404,32 @@ public class NavHandler : IExternalEventHandler {
       if (bb == null) return;
       XYZ center = (bb.Min + bb.Max) * 0.5;
       XYZ target = c.HasPoint && c.Point != null ? c.Point : center;
-      // radius = farthest box corner from the target, so the whole elements stay in view around the clash point
-      double r = 0;
-      foreach (var cx in new[] { bb.Min.X, bb.Max.X }) foreach (var cy in new[] { bb.Min.Y, bb.Max.Y }) foreach (var cz in new[] { bb.Min.Z, bb.Max.Z })
-        r = Math.Max(r, new XYZ(cx, cy, cz).DistanceTo(target));
       XYZ dir = c.Fwd.Normalize();
       XYZ up = c.Up - dir * c.Up.DotProduct(dir);   // perpendicular to dir, as ClashSetup does
       if (up.GetLength() < 1e-6) return;
       up = up.Normalize();
-      double d = Math.Max(2.0 / FT, r / Math.Tan(PerspHalfFov) * 1.3);   // #86: margin 1.3 (was 1.1), min 2 m
       XYZ right = dir.CrossProduct(up).Normalize();
+      // #87: half angles. Learned values win; otherwise hx = 25 deg and hy from the crop box aspect (|Y extent| / |X extent|, invalid = 0.6)
+      double hx = fovHx, hy = fovHy;
+      if (!fovLearned) {
+        double aspect = 0.6;
+        try {
+          var cb = v.CropBox;
+          double ex = Math.Abs(cb.Max.X - cb.Min.X), ey = Math.Abs(cb.Max.Y - cb.Min.Y);
+          if (ex > 1e-9 && ey > 1e-9) { double q = ey / ex; if (q > 0.1 && q < 10) aspect = q; }
+        } catch (Exception) { }
+        hy = Math.Atan(Math.Tan(PerspHalfFov) * aspect);
+      }
+      double tx = Math.Tan(hx), ty = Math.Tan(hy);
+      if (tx < 1e-6 || ty < 1e-6) return;
+      // #87: per corner: lateral offsets (a, b), depth z (positive = far side): eye distance = max(|a| / tan hx, |b| / tan hy) - z
+      double dReq = 0;
+      foreach (var cx in new[] { bb.Min.X, bb.Max.X }) foreach (var cy in new[] { bb.Min.Y, bb.Max.Y }) foreach (var cz in new[] { bb.Min.Z, bb.Max.Z }) {
+        XYZ o = new XYZ(cx, cy, cz) - target;
+        double a = o.DotProduct(right), b = o.DotProduct(up), z = o.DotProduct(dir);
+        dReq = Math.Max(dReq, Math.Max(Math.Abs(a) / tx, Math.Abs(b) / ty) - z);
+      }
+      double d = Math.Max(2.0 / FT, dReq * 1.3);   // #86: margin 1.3, min 2 m
       int vl = 0, vt = 0, vr = 0, vb = 0; bool have = false;
       try {
         var uiv = uidoc.GetOpenUIViews().FirstOrDefault(u => u.ViewId == v.Id);
@@ -420,13 +439,52 @@ public class NavHandler : IExternalEventHandler {
       if (have) {
         bool left; double f = FormCover(vl, vt, vr, vb, out left);
         if (f > 0.01) {
-          double w = 2.0 * d * Math.Tan(PerspHalfFov);
+          double w = 2.0 * d * tx;   // #87: real hx
           double s = w * f / 2.0;
           target = target + right * (left ? -s : s);   // camera moves toward the covered side: the clash appears in the free part
         }
       }
       XYZ eye = target - dir * d;
       v.SetOrientation(new ViewOrientation3D(eye, up, dir));
+      fitEye = eye; fitDir = dir; fitUp = up; fitRight = right;
+    } catch (Exception) { }
+  }
+
+  // #87: after the commit: read the real frustum from the active perspective UIView (GetZoomCorners: 2 corners, model space) and, when the half angles
+  // differ from the assumed ones by more than 2 degrees, cache them and re-run the fit in a small transaction. UIView.GetZoomCorners exists in Revit 2022-2027.
+  void RefitFromFrustum(Document doc, UIDocument uidoc, View3D v, VpCam c, List<Hit> hits, BoundingBoxXYZ clashBox) {
+    try {
+      if (fitEye == null || fitDir == null) return;
+      var uiv = uidoc.GetOpenUIViews().FirstOrDefault(u => u.ViewId == v.Id);
+      if (uiv == null) return;
+      var zc = uiv.GetZoomCorners();
+      if (zc == null || zc.Count < 2) return;
+      double mx = 0, my = 0, mdepth = double.MaxValue;
+      foreach (XYZ q in zc) {
+        XYZ o = q - fitEye;
+        double depth = o.DotProduct(fitDir);
+        if (depth <= 1e-9) return;   // guard
+        mdepth = Math.Min(mdepth, depth);
+        mx = Math.Max(mx, Math.Abs(o.DotProduct(fitRight)) / depth);
+        my = Math.Max(my, Math.Abs(o.DotProduct(fitUp)) / depth);
+      }
+      double rhx = Math.Atan(mx), rhy = Math.Atan(my);
+      if (rhx < 1e-3 || rhy < 1e-3) return;
+      double ahx = fovHx, ahy = fovHy;
+      if (!fovLearned) {   // assumed values of the first pass: recompute the crop-box guess the same way
+        ahx = PerspHalfFov;
+        double aspect = 0.6;
+        try { var cb = v.CropBox; double ex = Math.Abs(cb.Max.X - cb.Min.X), ey = Math.Abs(cb.Max.Y - cb.Min.Y); if (ex > 1e-9 && ey > 1e-9) { double q = ey / ex; if (q > 0.1 && q < 10) aspect = q; } } catch (Exception) { }
+        ahy = Math.Atan(Math.Tan(PerspHalfFov) * aspect);
+      }
+      const double tol = 2.0 * Math.PI / 180.0;
+      if (Math.Abs(rhx - ahx) <= tol && Math.Abs(rhy - ahy) <= tol) { fovHx = ahx; fovHy = ahy; fovLearned = true; return; }
+      fovHx = rhx; fovHy = rhy; fovLearned = true;
+      using (var t2 = new Transaction(doc, "Clash Viewer fit")) {
+        t2.Start();
+        FitPerspective(doc, uidoc, v, c, hits, clashBox);   // SetOrientation only
+        t2.Commit();
+      }
     } catch (Exception) { }
   }
 
@@ -769,6 +827,7 @@ public class NavHandler : IExternalEventHandler {
       if (uidoc.ActiveView == null || uidoc.ActiveView.Id != tv.Id) uidoc.ActiveView = tv;
       try { var uiv = uidoc.GetOpenUIViews().FirstOrDefault(u => u.ViewId == tv.Id); if (uiv != null && !(c.IsClash && tv.IsPerspective)) uiv.ZoomToFit(); } catch (Exception) { }   // #85: not for the perspective clash view (it would undo the fit)
       if (c.IsClash && uidoc.ActiveView != null && uidoc.ActiveView.Id == tv.Id) {
+        if (tv.IsPerspective) RefitFromFrustum(doc, uidoc, tv, c, hits, clashBox);   // #87: real frustum, second fit
         if (tv.IsPerspective) RememberRect(uidoc, tv);   // #85: perspective is fitted in the transaction (FitPerspective); ZoomAndCenterRectangle only for orthographic
         else ZoomToHits(doc, uidoc, tv, hits);
       }
