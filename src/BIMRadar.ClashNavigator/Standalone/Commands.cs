@@ -13,4 +13,14 @@ namespace BIMRadar.ClashNavigator.Standalone
             return Result.Succeeded;
         }
     }
+
+    [Transaction(TransactionMode.Manual)]
+    public class ClearOverridesCommand : IExternalCommand
+    {
+        public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
+        {
+            Launcher.ClearOverrides(commandData.Application);
+            return Result.Succeeded;
+        }
+    }
 }

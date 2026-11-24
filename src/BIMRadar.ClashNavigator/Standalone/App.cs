@@ -78,6 +78,11 @@ namespace BIMRadar.ClashNavigator.Standalone
             SetImages(openData, "ClashViewer");
 
             panel.AddItem(openData);
+
+            var clearData = new PushButtonData("BIMRadar_ClashNavigator_ClearOverrides", "Clear\nOverrides", asm, ns + "ClearOverridesCommand");
+            clearData.ToolTip = "Remove element colour/halftone/transparency overrides in the active view (also Clash Viewer colours). Filters, templates and the model are not changed.";
+            SetImages(clearData, "ClearOverrides");
+            panel.AddItem(clearData);
         }
 
         private static void SetImages(PushButtonData data, string baseName)

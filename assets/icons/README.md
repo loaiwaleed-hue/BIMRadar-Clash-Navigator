@@ -28,6 +28,7 @@ The icons are original drawings, not copies of Autodesk icons.
 | Icon | Panel |
 |---|---|
 | `clash-viewer` | Review |
+| `clear-overrides` | Review |
 | `issues` | Review |
 | `viewpoints` | Review |
 | `next` | Review (not used in the ribbon) |
@@ -49,7 +50,7 @@ The icons are original drawings, not copies of Autodesk icons.
 Run from this folder (needs `rsvg-convert`, from librsvg):
 
 ```sh
-for f in clash-viewer next previous issues viewpoints model-health warnings qaqc-check fix audit; do
+for f in clash-viewer next previous issues viewpoints model-health warnings qaqc-check fix audit clear-overrides; do
   for s in "" .dark; do
     rsvg-convert -w 32 -h 32 $f$s.svg -o png/$f$s-32.png
     src=$f$s.svg; [ -f $f$s-16.svg ] && src=$f$s-16.svg
@@ -58,4 +59,4 @@ for f in clash-viewer next previous issues viewpoints model-health warnings qaqc
 done
 ```
 
-Then copy the light PNGs to `src/BIMRadar.ClashNavigator/Resources/` as `ClashViewer32.png`, `ClashViewer16.png` (the next / previous icons are not used in the ribbon, so they are not copied). For pyRevit buttons, copy the 32 px light PNG to each pushbutton's `icon.png` and the dark 32 px PNG to `icon.dark.png`.
+Then copy the light PNGs to `src/BIMRadar.ClashNavigator/Resources/` as `ClashViewer32.png`, `ClashViewer16.png` (`ClearOverrides32.png`, `ClearOverrides16.png` likewise; the next / previous icons are not used in the ribbon, so they are not copied). For pyRevit buttons, copy the 32 px light PNG to each pushbutton's `icon.png` and the dark 32 px PNG to `icon.dark.png`.

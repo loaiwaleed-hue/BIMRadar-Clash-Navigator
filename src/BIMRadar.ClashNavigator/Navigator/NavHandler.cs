@@ -238,6 +238,19 @@ public class NavHandler : IExternalEventHandler {
     }
   }
 
+  // #96 (Clear Overrides ribbon button): resets the category overrides this tool set in the view, forgets the tracking of this view and returns
+  // true when the view was tracked. Must be called inside the caller's open transaction. The element overrides are reset by the caller's own scan.
+  public bool ResetTrackedCategories(View v) {
+    bool tracked = colored.ContainsKey(v.Id) || coloredCats.ContainsKey(v.Id);
+    List<ElementId> ids;
+    if (coloredCats.TryGetValue(v.Id, out ids)) {
+      foreach (var id in ids) { try { v.SetCategoryOverrides(id, new OverrideGraphicSettings()); } catch (Exception) { } }
+      coloredCats.Remove(v.Id);
+    }
+    colored.Remove(v.Id);
+    return tracked;
+  }
+
   // surface + cut foreground = solid pattern in col, projection + cut lines in col
   static OverrideGraphicSettings Ogs(ElementId solid, Color col) {
     var o = new OverrideGraphicSettings();

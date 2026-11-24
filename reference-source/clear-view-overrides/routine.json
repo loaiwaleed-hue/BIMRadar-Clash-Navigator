@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "clear-view-overrides",
+  "name": "Clear Override",
+  "description": "Removes every element graphic override (colour, halftone, transparency) from the chosen views, putting the elements back to their normal view graphics. It does not touch view filters, view templates, or the model itself.",
+  "kind": "script",
+  "ribbon": {
+    "panel": "Routines",
+    "buttonText": "Clear Override"
+  },
+  "inputs": [
+    {
+      "name": "viewNames",
+      "label": "Views to clear",
+      "description": "One view name per line. A partial name works too - a single line reading Block - 0- catches all four basement blockwork plans. Leave empty to clear only the view that is open.",
+      "type": "stringArray",
+      "required": false
+    },
+    {
+      "name": "deepScan",
+      "label": "Deep scan (slower)",
+      "description": "Off: clears elements currently visible in the view - fast, and enough in almost every case. On: scans the whole model, so it also catches overrides on elements that are hidden or outside the view range.",
+      "type": "boolean",
+      "required": false
+    }
+  ],
+  "readOnly": false,
+  "destructive": true,
+  "created": "2026-08-23T06:30:32Z",
+  "modified": "2026-08-23T06:48:46Z",
+  "script": {
+    "files": [
+      "Routine.cs"
+    ]
+  }
+}

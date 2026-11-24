@@ -43,6 +43,20 @@ namespace BIMRadar.ClashNavigator
             }
         }
 
+        /// <summary>#96: removes element graphic overrides (and the Clash Viewer category colours) in the active view.</summary>
+        public static void ClearOverrides(UIApplication uiapp)
+        {
+            try
+            {
+                string text = Tools.ClearOverrides.Run(uiapp);
+                TaskDialog.Show("BIMRadar · Clear Overrides", text);
+            }
+            catch (Exception ex)
+            {
+                TaskDialog.Show("BIMRadar · Clear Overrides", ex.Message);
+            }
+        }
+
         // No ribbon button uses this since the 2026-11-24 owner decision (Next / Previous live in the window); kept for possible later use.
         /// <summary>Steps the open Clash Viewer to the next item (same path as its Next button).</summary>
         public static void Next(UIApplication uiapp)

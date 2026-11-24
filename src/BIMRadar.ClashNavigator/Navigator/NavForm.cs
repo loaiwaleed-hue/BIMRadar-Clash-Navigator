@@ -648,6 +648,7 @@ public class NavForm : WF.Form {
   }
 
   // #80: button text follows the handler state
+  public NavHandler Handler { get { return H; } }   // #96: Clear Overrides button
   public void SyncColors() { btnColor.Text = H.ColorsOn ? "Clear override" : "Create override"; }
 
   // #70 / #71: line 1 = anchor model / zone (amber "Not anchored to a model" for a Revizto issue without anchor model),
