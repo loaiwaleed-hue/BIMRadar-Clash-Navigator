@@ -86,8 +86,8 @@ public class NavForm : WF.Form {
     KeyPreview = true;
     var blue = SD.Color.FromArgb(0, 120, 212);
 
-    lblName = new WF.Label { Left = 12, Top = 10, Width = 252, Height = 26, Font = new SD.Font("Segoe UI Semibold", 12f), AutoEllipsis = true, Text = "Loading..." };
-    btnChange = new WF.Button { Left = 268, Top = 10, Width = 100, Height = 26, Text = "\u25C2 Change source", Font = new SD.Font("Segoe UI", 8.5f) };   // #92: top right, same row as the title (title narrowed to 252 px), Previous / Next stay below
+    lblName = new WF.Label { Left = 12, Top = 10, Width = 282, Height = 26, Font = new SD.Font("Segoe UI Semibold", 12f), AutoEllipsis = true, Text = "Loading..." };
+    btnChange = new WF.Button { Left = 298, Top = 10, Width = 70, Height = 26, Text = "\u25C2 Back", Font = new SD.Font("Segoe UI", 8.5f) };   // #92: top right, same row as the title (title narrowed to 252 px), Previous / Next stay below
     lblCount = new WF.Label { Left = 12, Top = 38, Width = 356, Height = 20, ForeColor = SD.Color.DimGray, AutoEllipsis = true, Text = "" };
     lblInfo = new WF.Label { Left = 12, Top = 60, Width = 356, Height = 34, ForeColor = SD.Color.DimGray, Text = "" };
     btnPrev = new WF.Button { Left = 12, Top = 102, Width = 176, Height = 46, Text = "<  Previous", Font = new SD.Font("Segoe UI Semibold", 11f) };
@@ -227,7 +227,7 @@ public class NavForm : WF.Form {
     btnSnap.Click += (s, e) => Go("Snapshot", 0);
     btnIso.Click += (s, e) => Go("Isolate", 0);
     btnChange.Click += (s, e) => { FlushComment(); H.ChangingSource = true; H.Action = "ChangeSource"; Ev.Raise(); };   // #92: the Revit API call (reopen with the dialog) runs in the ExternalEvent handler
-    tip.SetToolTip(btnChange, "Close this list and choose another source (clash report / viewpoints / Revizto).");
+    tip.SetToolTip(btnChange, "Back to the source dialog: choose another folder or report, or another source (clash report / viewpoints / Revizto).");
     btnDup.Click += (s, e) => Go("Duplicate", 0);
     btnGoto.Click += (s, e) => Go("GotoElement", 0);   // #73
     btnColor.Click += (s, e) => Go("ToggleColors", 0);   // #80
