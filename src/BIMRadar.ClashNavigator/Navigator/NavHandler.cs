@@ -51,6 +51,17 @@ public class NavHandler : IExternalEventHandler {
     return new FilteredElementCollector(doc).OfClass(typeof(RevitLinkInstance)).Cast<RevitLinkInstance>().Where(l => { try { return l.GetLinkDocument() != null; } catch (Exception) { return false; } }).ToList();
   }
 
+  // #90: Revit category names of the host document, collected once per document
+  HashSet<string> catNames; string catNamesDoc;
+  string PathCategory(Document doc, string path) {
+    if (catNames == null || catNamesDoc != doc.Title) {
+      catNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase); catNamesDoc = doc.Title;
+      foreach (Category cat in doc.Settings.Categories) { try { catNames.Add(cat.Name); } catch (Exception) { } }
+    }
+    foreach (var seg in (path ?? "").Split('>').Select(s => s.Trim()).Where(s => s != "")) if (catNames.Contains(seg)) return seg;
+    return null;
+  }
+
   // find each element by its Element ID: in the open model when the item's model is this file, else in the loaded link of that model
   List<Hit> FindHits(Document doc, VpCam c) {
     var res = new List<Hit>();
@@ -71,6 +82,14 @@ public class NavHandler : IExternalEventHandler {
         if (!h.Found) h.Where = links.Any(l => ReviztoData.ModelMatches(it.Key, l.GetLinkDocument().Title)) ? "not found in the link" : "model not open / not linked";
       }
       if (h.Found) { var hc = CatOf(doc, h); if (hc != null) h.CatName = hc.Name; }   // #81
+      // #90: the path's category segment must agree with the found element's category, else it is a different element with the same ID
+      if (h.Found && c.IsClash && h.CatName != "" && itemNo - 1 < c.ItemPaths.Count) {
+        string pathCat = PathCategory(doc, c.ItemPaths[itemNo - 1]);
+        if (pathCat != null && !string.Equals(pathCat, h.CatName, StringComparison.OrdinalIgnoreCase)) {
+          h.Eid = null; h.Link = null;
+          h.Where = "ID matches a different element (" + h.CatName + ", report says " + pathCat + "): check the model";
+        }
+      }
       res.Add(h);
     }
     return res;
@@ -581,9 +600,11 @@ public class NavHandler : IExternalEventHandler {
     XYZ center = (lo + hi) * 0.5;
     double diag = Math.Max((hi - lo).GetLength(), 1.0 / FT);
     XYZ dir = new XYZ(1, -1, 0.9).Normalize();                    // from the south-east, above
-    c.Eye = center + dir * (diag * 1.15);
-    c.Fwd = (center - c.Eye).Normalize();
-    c.Up = c.Fwd.CrossProduct(XYZ.BasisZ).CrossProduct(c.Fwd).Normalize();
+    if (!c.HasNavCam) {   // #23: a Navisworks viewpoint camera is kept exactly
+      c.Eye = center + dir * (diag * 1.15);
+      c.Fwd = (center - c.Eye).Normalize();
+      c.Up = c.Fwd.CrossProduct(XYZ.BasisZ).CrossProduct(c.Fwd).Normalize();
+    }
     c.Target = center;
     return ids;
   }
@@ -817,7 +838,7 @@ public class NavHandler : IExternalEventHandler {
         } else {
           tv.IsSectionBoxActive = false;
         }
-        if (c.IsClash && gotoBox == null && tv.IsPerspective) FitPerspective(doc, uidoc, tv, c, hits, clashBox);   // #85: after the section box is set
+        if (c.IsClash && !c.HasNavCam && gotoBox == null && tv.IsPerspective) FitPerspective(doc, uidoc, tv, c, hits, clashBox);   // #85: after the section box is set
         // #82: clash and VP: only the found elements when Isolated (clash: on at load, Isolate / Unisolate button); never for Revizto
         ApplyIsolation(doc, tv, hits, Isolated && !Source.StartsWith("Revizto"));   // #69 / #82: clash too, H.Isolated (default true for clash)
         Colorize(doc, tv, c.IsClash, hits);   // #80 / #81: after ApplyIsolation / ApplyCategories; after isolation + section box; failures are swallowed
@@ -827,7 +848,7 @@ public class NavHandler : IExternalEventHandler {
       if (uidoc.ActiveView == null || uidoc.ActiveView.Id != tv.Id) uidoc.ActiveView = tv;
       try { var uiv = uidoc.GetOpenUIViews().FirstOrDefault(u => u.ViewId == tv.Id); if (uiv != null && !(c.IsClash && tv.IsPerspective)) uiv.ZoomToFit(); } catch (Exception) { }   // #85: not for the perspective clash view (it would undo the fit)
       if (c.IsClash && uidoc.ActiveView != null && uidoc.ActiveView.Id == tv.Id) {
-        if (tv.IsPerspective) RefitFromFrustum(doc, uidoc, tv, c, hits, clashBox);   // #87: real frustum, second fit
+        if (tv.IsPerspective && !c.HasNavCam) RefitFromFrustum(doc, uidoc, tv, c, hits, clashBox);   // #87: real frustum, second fit; #23: not for an exact Navisworks camera
         if (tv.IsPerspective) RememberRect(uidoc, tv);   // #85: perspective is fitted in the transaction (FitPerspective); ZoomAndCenterRectangle only for orthographic
         else ZoomToHits(doc, uidoc, tv, hits);
       }

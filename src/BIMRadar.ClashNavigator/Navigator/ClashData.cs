@@ -32,10 +32,46 @@ public static class ClashData {
   }
 
   // model file from a Navisworks selection path "File > X.nwd > MODEL.nwc > Category > ..."
-  static string ModelOf(string path) {
+  // #90: the LAST model-file segment (innermost file: 'File > HOST.nwc > LINK.rvt > ...' gives LINK.rvt)
+  internal static string ModelOf(string path) {
     var segs = path.Split('>').Select(s => s.Trim()).Where(s => s != "").ToList();
-    var m = segs.Skip(1).FirstOrDefault(s => Regex.IsMatch(s, "\\.(nwc|rvt|ifc|dwg|nwd)$", RegexOptions.IgnoreCase) && !s.EndsWith(".nwd", StringComparison.OrdinalIgnoreCase));
+    var m = segs.Skip(1).LastOrDefault(s => Regex.IsMatch(s, "\\.(nwc|rvt|ifc|dwg|nwd)$", RegexOptions.IgnoreCase) && !s.EndsWith(".nwd", StringComparison.OrdinalIgnoreCase));
     return m ?? (segs.Count > 1 ? segs[1] : "");
+  }
+
+  // #23: whole-word, case-insensitive match of a clash name inside a viewpoint name ("Clash1" matches "Test A - Clash1", not "Clash10")
+  internal static bool NameMatches(string clash, string vp) {
+    clash = (clash ?? "").Trim(); vp = (vp ?? "").Trim();
+    if (clash == "" || vp == "") return false;
+    if (string.Equals(clash, vp, StringComparison.OrdinalIgnoreCase)) return true;
+    return Regex.IsMatch(vp, "(?<![\\p{L}\\p{N}])" + Regex.Escape(clash) + "(?![\\p{L}\\p{N}])", RegexOptions.IgnoreCase);
+  }
+
+  // #23: when a Navisworks viewpoints XML (newest one) sits in the same folder as the clash HTML, give matching clashes its exact camera.
+  // Returns the number of clashes that got a camera. Ranking: viewpoint folder equals the clash's Test (+2), exact name (+1).
+  public static int ApplyNavCams(List<VpCam> clashes, string htmlPath, Document doc) {
+    try {
+      string dir = System.IO.Path.GetDirectoryName(htmlPath);
+      var xml = new System.IO.DirectoryInfo(dir).GetFiles("*.xml").OrderByDescending(f => f.LastWriteTime).FirstOrDefault(f => NavData.IsViewpointXml(f.FullName));
+      if (xml == null) return 0;
+      string nwd, folder;
+      var vps = NavData.Load(xml.FullName, doc, out nwd, out folder);
+      if (vps.Count == 0) return 0;
+      int n = 0;
+      foreach (var c in clashes) {
+        VpCam best = null; int bestScore = -1;
+        foreach (var vp in vps) {
+          if (!NameMatches(c.Name, vp.Name)) continue;
+          int score = (string.Equals(vp.VpFolder, c.Test, StringComparison.OrdinalIgnoreCase) ? 2 : 0) + (string.Equals(vp.Name.Trim(), c.Name.Trim(), StringComparison.OrdinalIgnoreCase) ? 1 : 0);
+          if (score > bestScore) { best = vp; bestScore = score; }
+        }
+        if (best == null || best.Eye == null || best.Fwd == null || best.Up == null) continue;
+        c.Eye = best.Eye; c.Fwd = best.Fwd; c.Up = best.Up;
+        if (best.FovH > 0.01 && best.FovH < 3.0) c.FovH = best.FovH;
+        c.HasNavCam = true; n++;
+      }
+      return n;
+    } catch (Exception) { return 0; }
   }
 
   public static string StatusTag(string s) {
@@ -116,7 +152,7 @@ public static class ClashData {
           var em = RxEid.Match(T(ci));
           string model = ModelOf(T(cp));
           if (model != "" && !c.Models.Contains(model)) c.Models.Add(model);
-          if (em.Success) { int id; if (int.TryParse(em.Groups[1].Value, out id)) { c.Items.Add(new KeyValuePair<string, int>(model, id)); parts.Add(model + " #" + id); } }
+          if (em.Success) { int id; if (int.TryParse(em.Groups[1].Value, out id)) { c.Items.Add(new KeyValuePair<string, int>(model, id)); c.ItemPaths.Add(T(cp)); /* #90 */ parts.Add(model + " #" + id); } }
         }
         c.Model = string.Join(" / ", c.Models);
         c.Note = string.Join(" · ", parts);

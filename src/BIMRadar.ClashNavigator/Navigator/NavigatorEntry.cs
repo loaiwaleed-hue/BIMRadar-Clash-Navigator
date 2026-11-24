@@ -90,6 +90,7 @@ public static class NavigatorEntry {
       bool hasStatus;
       cams = ClashData.Load(pathIn, doc, out htmlTitle, out picDir, out hasStatus);
       if (cams.Count == 0) return "No clashes found in: " + pathIn + ". Export the report from Clash Detective as HTML (Tabular) with Clash Point and Item ID.";
+      ClashData.ApplyNavCams(cams, pathIn, doc);   // #23
       projectDir = System.IO.Path.GetDirectoryName(pathIn);
       htmlName = System.IO.Path.GetFileNameWithoutExtension(pathIn) + "_Navigator.html";
       htmlFolder = "Navisworks clash test"; sourceName = "Navisworks clash test"; fromFile = System.IO.Path.GetFileName(pathIn);

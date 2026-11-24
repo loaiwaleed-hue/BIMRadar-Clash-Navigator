@@ -33,5 +33,8 @@ public class VpCam {
   public string Test = "", Status = "";
   public List<string> Models = new List<string>();                                 // models involved (Revizto: none, Model used)
   public List<KeyValuePair<string, int>> Items = new List<KeyValuePair<string, int>>(); // (model file, Element ID)
+  public List<string> ItemPaths = new List<string>();   // #90: full Navisworks path of each item, parallel to Items
+  public bool HasNavCam;                                 // #23: Eye/Fwd/Up/FovH come from a Navisworks viewpoint (clash only)
+  public string VpFolder = "";                           // #23: name of the viewfolder a viewpoint was read from (NavData.Load)
 }
 }
