@@ -18,6 +18,7 @@ public class NavHandler : IExternalEventHandler {
   public List<VpCam> Cams = new List<VpCam>();
   public List<int> Order = new List<int>();   // 1-based indexes into Cams that the current model filter shows
   public string Action = "Next";
+  public bool ChangingSource;   // #92: set by the form's Change source button
   public int GoTo = 1;                        // for "Goto": 1-based position in Order
   public bool UseBox = true;
   public double BoxM = 3.0;
@@ -706,6 +707,10 @@ public class NavHandler : IExternalEventHandler {
       if (cur < 1 && tv != null) cur = ViewIndex(tv.Name);
       string a = (Action ?? "Next");
 
+      if (a == "ChangeSource") {   // #92: reopen through the same path as the ribbon button, dialog forced
+        Launcher.Open(app, true);
+        return;
+      }
       if (a == "Snapshot") {
         if (cur >= 1 && cur <= count && NotHere(Cams[cur - 1], doc)) {
           if (Form != null && !Form.IsDisposed) Form.ShowOtherModel(Cams[cur - 1].Model, doc.Title);

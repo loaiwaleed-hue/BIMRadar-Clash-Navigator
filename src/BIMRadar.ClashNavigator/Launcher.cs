@@ -19,10 +19,16 @@ namespace BIMRadar.ClashNavigator
         /// <summary>Opens the Clash Viewer window (modeless). Shows a dialog only on errors or when the window did not open.</summary>
         public static void Open(UIApplication uiapp)
         {
+            Open(uiapp, false);
+        }
+
+        /// <summary>#92: forceDialog = true always shows the source dialog (Change source button); false reopens the remembered source of this document.</summary>
+        public static void Open(UIApplication uiapp, bool forceDialog)
+        {
             string result;
             try
             {
-                result = NavigatorEntry.Open(uiapp);
+                result = NavigatorEntry.Open(uiapp, forceDialog);
             }
             catch (Exception ex)
             {

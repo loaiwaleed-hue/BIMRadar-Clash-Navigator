@@ -38,6 +38,7 @@ public class NavForm : WF.Form {
   string appliedKey = null;                    // model filter that H.Order currently reflects
   string sourceWord;
 
+  WF.Button btnChange;   // #92
   WF.Button btnIso, btnDup, btnColor;   // #80: btnColor = Clear / Create override (clash source only)
   WF.ComboBox cmbSt;
   static readonly string[] StKeys = { "open", "closed", "clarify", "others" };
@@ -85,7 +86,8 @@ public class NavForm : WF.Form {
     KeyPreview = true;
     var blue = SD.Color.FromArgb(0, 120, 212);
 
-    lblName = new WF.Label { Left = 12, Top = 10, Width = 356, Height = 26, Font = new SD.Font("Segoe UI Semibold", 12f), AutoEllipsis = true, Text = "Loading..." };
+    lblName = new WF.Label { Left = 12, Top = 10, Width = 252, Height = 26, Font = new SD.Font("Segoe UI Semibold", 12f), AutoEllipsis = true, Text = "Loading..." };
+    btnChange = new WF.Button { Left = 268, Top = 10, Width = 100, Height = 26, Text = "\u25C2 Change source", Font = new SD.Font("Segoe UI", 8.5f) };   // #92: top right, same row as the title (title narrowed to 252 px), Previous / Next stay below
     lblCount = new WF.Label { Left = 12, Top = 38, Width = 356, Height = 20, ForeColor = SD.Color.DimGray, AutoEllipsis = true, Text = "" };
     lblInfo = new WF.Label { Left = 12, Top = 60, Width = 356, Height = 34, ForeColor = SD.Color.DimGray, Text = "" };
     btnPrev = new WF.Button { Left = 12, Top = 102, Width = 176, Height = 46, Text = "<  Previous", Font = new SD.Font("Segoe UI Semibold", 11f) };
@@ -140,7 +142,7 @@ public class NavForm : WF.Form {
     var lblSize = new WF.Label { Left = 170, Top = y + 3, Width = 110, Height = 20, Text = "Box size (m):" };
     num = new WF.NumericUpDown { Left = 280, Top = y - 1, Width = 88, DecimalPlaces = 1, Increment = 0.5m, Minimum = 0.5m, Maximum = 50m, Value = (decimal)Math.Min(50.0, Math.Max(0.5, H.BoxM)) };
     y += 32;
-    bool noIso = isVp || isRevizto;   // #69: Revizto too; #82: clash has the button again (Isolate / Unisolate)
+    bool noIso = !isClash;   // #93: Isolate / Unisolate button for the clash source ONLY (hidden for Revizto and viewpoints; Revizto never isolates, #69)
     // #85: clash: row A = [Unisolate | Clear override], row B = [Duplicate 3D view | Save snapshot]; Revizto / VP keep the old layout
     btnIso = new WF.Button { Left = 12, Top = y, Width = 176, Height = 34, Text = isClash ? "Unisolate" : "Isolate in 3D view", Visible = !noIso, Enabled = false };   // #82
     btnColor = new WF.Button { Left = 192, Top = y, Width = 176, Height = 34, Text = "Clear override", Visible = isClash };   // #80 / #85: clash only, right of Unisolate
@@ -198,7 +200,7 @@ public class NavForm : WF.Form {
     tip.SetToolTip(btnPick[1], "Select by ID: select this element in Revit (found by its Element ID)");
     tip.SetToolTip(btnDup, "Orthographic copy of this view (WIP-Clash Viewer-VP-...): same direction and section box, all annotations off. Fix the issue there; the VP view stays for the snapshot.");
     tip.SetToolTip(cmbSt, "Action status (your own): Open / Closed / Need clarification / Action by others (another contractor has to act). The Revizto / clash status from the source is shown in the info line above and in Filter. Shared with the web navigator (navigator_status.json in the picture folder). New items start as Open.");
-    Controls.AddRange(new WF.Control[] { lblName, lblCount, lblInfo, btnPrev, btnNext, lblModel, cmbModel, lblMS, txtMS, tagPanel, lblTest, cmbTest, lblSub, cmbSub, txtSub, cmbSubSt, cmbStamp, lblAct, cmb,
+    Controls.AddRange(new WF.Control[] { btnChange, lblName, lblCount, lblInfo, btnPrev, btnNext, lblModel, cmbModel, lblMS, txtMS, tagPanel, lblTest, cmbTest, lblSub, cmbSub, txtSub, cmbSubSt, cmbStamp, lblAct, cmb,
       btnPick[0], lblItem[0], btnPick[1], lblItem[1], chk, lblSize, num, btnIso, btnSnap, btnDup, btnColor, cmbSt, lblDone, btnWeb, btnOpen, lblCm, txtComment, btnPost, rbBefore, rbAfter, pic, lblPic, lblWhy1, lblWhy2, lblWhy3, lblHint, chkHide, btnCheck, btnGoto });
 
     // model list: "All" first, then every model with its count; default = the model that matches the open file
@@ -224,6 +226,8 @@ public class NavForm : WF.Form {
     btnPrev.Click += (s, e) => Go("Prev", 0);
     btnSnap.Click += (s, e) => Go("Snapshot", 0);
     btnIso.Click += (s, e) => Go("Isolate", 0);
+    btnChange.Click += (s, e) => { FlushComment(); H.ChangingSource = true; H.Action = "ChangeSource"; Ev.Raise(); };   // #92: the Revit API call (reopen with the dialog) runs in the ExternalEvent handler
+    tip.SetToolTip(btnChange, "Close this list and choose another source (clash report / viewpoints / Revizto).");
     btnDup.Click += (s, e) => Go("Duplicate", 0);
     btnGoto.Click += (s, e) => Go("GotoElement", 0);   // #73
     btnColor.Click += (s, e) => Go("ToggleColors", 0);   // #80
@@ -280,7 +284,14 @@ public class NavForm : WF.Form {
     };
     tip.SetToolTip(btnPost, "Post the comment (saved to the web navigator and its report). After posting, Edit opens it again.");
     Activated += (s, e) => { FlushComment(); if (NavData.ReloadStates() && curN > 0) Sync(curN); };
-    FormClosed += (s, e) => { FlushComment(); Instance = null; if (pic.Image != null) pic.Image.Dispose(); try { Ev.Dispose(); } catch (Exception) { } };
+    FormClosed += (s, e) => {
+      FlushComment(); Instance = null; if (pic.Image != null) pic.Image.Dispose();
+      if (H.ChangingSource) {   // #92: closed from inside its own ExternalEvent: dispose the event once Revit is idle again
+        var ev0 = Ev; EventHandler idle = null;
+        idle = (s2, e2) => { WF.Application.Idle -= idle; try { ev0.Dispose(); } catch (Exception) { } };
+        WF.Application.Idle += idle;
+      } else { try { Ev.Dispose(); } catch (Exception) { } }
+    };
   }
 
   // "select by ID" button picture: small ID card with a pointer
@@ -631,11 +642,7 @@ public class NavForm : WF.Form {
         btnIso.Text = H.Isolated ? "Unisolate" : "Isolate";
         btnIso.BackColor = H.Isolated ? SD.Color.FromArgb(255, 236, 179) : SD.Color.Empty; btnIso.UseVisualStyleBackColor = !H.Isolated;
         btnIso.Enabled = H.Cur > 0;   // a clash has been opened at least once
-      } else {
-      btnIso.Text = H.Isolated ? "Restore original view" : "Isolate in 3D view";
-      btnIso.BackColor = H.Isolated ? SD.Color.FromArgb(255, 236, 179) : SD.Color.Empty; btnIso.UseVisualStyleBackColor = !H.Isolated;
-      btnIso.Enabled = H.Isolated || (H.Cur == n && H.Hits.Any(x => x.Found));
-      }
+      }   // #93: no else: the button is hidden and never touched for Revizto / viewpoints
       ShowPicture();
     } finally { syncing = false; }
   }

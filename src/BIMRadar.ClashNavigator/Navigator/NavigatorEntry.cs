@@ -13,22 +13,69 @@ using SD = System.Drawing;
 namespace BIMRadar.ClashNavigator.Navigator
 {
 public static class NavigatorEntry {
-  public static string Open(UIApplication uiapp) {
+  // #92: last source per document (key = doc.PathName, or doc.Title when unsaved). In memory for the session + last_by_doc.txt (key|kind|path, newest last, max 50).
+  public class LastSource { public string Kind; public string Path; }
+  static readonly Dictionary<string, LastSource> LastByDoc = new Dictionary<string, LastSource>(StringComparer.OrdinalIgnoreCase);
+  static readonly List<string> LastOrder = new List<string>();
+  static bool lastLoaded;
+  const string LastFile = "last_by_doc.txt";
+
+  static string DocKey(Document doc) { return string.IsNullOrEmpty(doc.PathName) ? doc.Title : doc.PathName; }
+
+  static void LoadLast() {
+    if (lastLoaded) return;
+    lastLoaded = true;
+    try {
+      var p = System.IO.Path.Combine(NavData.AppDir, LastFile);
+      if (!System.IO.File.Exists(p)) return;
+      foreach (var line in System.IO.File.ReadAllLines(p)) {
+        var parts = line.Split('|');
+        if (parts.Length != 3 || parts[0] == "" || parts[2] == "") continue;
+        if (!LastByDoc.ContainsKey(parts[0])) LastOrder.Add(parts[0]);
+        LastByDoc[parts[0]] = new LastSource { Kind = parts[1], Path = parts[2] };
+      }
+    } catch (Exception) { }
+  }
+
+  static void Remember(string key, string kind, string path) {
+    LoadLast();
+    LastOrder.Remove(key);
+    LastOrder.Add(key);
+    LastByDoc[key] = new LastSource { Kind = kind, Path = path };
+    while (LastOrder.Count > 50) { LastByDoc.Remove(LastOrder[0]); LastOrder.RemoveAt(0); }
+    try {
+      System.IO.Directory.CreateDirectory(NavData.AppDir);
+      System.IO.File.WriteAllLines(System.IO.Path.Combine(NavData.AppDir, LastFile), LastOrder.Select(k => k + "|" + LastByDoc[k].Kind + "|" + LastByDoc[k].Path).ToArray());
+    } catch (Exception) { }
+  }
+
+  static bool SourceExists(LastSource ls) {
+    if (ls == null || string.IsNullOrEmpty(ls.Path)) return false;
+    if (ls.Kind == "viewpoints") return System.IO.Directory.Exists(ls.Path) || System.IO.File.Exists(ls.Path);
+    if (ls.Kind == "clash" || ls.Kind == "revizto") return System.IO.File.Exists(ls.Path);
+    return false;
+  }
+
+  public static string Open(UIApplication uiapp) { return Open(uiapp, false); }
+
+  // forceDialog (#92): always ask for the source (Change source button); otherwise reopen this document's remembered source when it still exists.
+  public static string Open(UIApplication uiapp, bool forceDialog) {
     var uidoc = uiapp.ActiveUIDocument;
     if (uidoc == null) return "Open a Revit model first.";
     var doc = uidoc.Document;
     // Viewpoint Navigator: Navisworks viewpoints (XML + report folder) or Revizto issues (Export to Excel).
     // Writes Viewpoint_Navigator.html next to the data and opens the Previous / Next window.
-    string pathIn = ("" ?? "").Trim().Trim('"');
+    string pathIn = "";
     System.IO.Directory.CreateDirectory(NavData.AppDir);
     Func<string, string> readPref = n => { try { var p = System.IO.Path.Combine(NavData.AppDir, n); return System.IO.File.Exists(p) ? System.IO.File.ReadAllText(p).Trim() : ""; } catch (Exception) { return ""; } };
     Action<string, string> writePref = (n, v) => { try { System.IO.File.WriteAllText(System.IO.Path.Combine(NavData.AppDir, n), v ?? ""); } catch (Exception) { } };
     var owner = new Win32Owner(uiapp.MainWindowHandle);
 
-    if (NavForm.Instance != null && !NavForm.Instance.IsDisposed) { try { NavForm.Instance.Close(); } catch (Exception) { } }
-
-    string kind;
-    if (pathIn != "") kind = pathIn.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) ? "revizto" : pathIn.EndsWith(".html", StringComparison.OrdinalIgnoreCase) || pathIn.EndsWith(".htm", StringComparison.OrdinalIgnoreCase) ? "clash" : "viewpoints";
+    string docKey = DocKey(doc);
+    LoadLast();
+    string kind = null;
+    LastSource remembered;
+    if (!forceDialog && LastByDoc.TryGetValue(docKey, out remembered) && SourceExists(remembered)) { kind = remembered.Kind; pathIn = remembered.Path; }   // #92: skip the dialog
     else {
       using (var sd = new SourceDialog(readPref("last_source.txt"))) {
         if (sd.ShowDialog(owner) != System.Windows.Forms.DialogResult.OK || sd.Choice == null) return "Cancelled.";
@@ -65,6 +112,14 @@ public static class NavigatorEntry {
       }
     }
 
+    // the old window closes only now, so a cancelled dialog (Change source) keeps it open
+    if (NavForm.Instance != null && !NavForm.Instance.IsDisposed) { try { NavForm.Instance.Close(); } catch (Exception) { } }
+    return LoadSource(uiapp, doc, owner, kind, pathIn, docKey);
+  }
+
+  // #92: loads a chosen / remembered source (kind = clash | viewpoints | revizto) and opens the window
+  static string LoadSource(UIApplication uiapp, Document doc, Win32Owner owner, string kind, string pathIn, string docKey) {
+    Action<string, string> writePref = (n, v) => { try { System.IO.File.WriteAllText(System.IO.Path.Combine(NavData.AppDir, n), v ?? ""); } catch (Exception) { } };
     List<VpCam> cams;
     string projectDir, picDir, htmlTitle, htmlFolder, reportName = null, sourceName, defaultModel = "", fromFile, htmlName = "Viewpoint_Navigator.html";
 
@@ -114,6 +169,8 @@ public static class NavigatorEntry {
       picDir = NavData.FindPictureDir(projectDir, "", cams);
       sourceName = "Navisworks viewpoints"; fromFile = System.IO.Path.GetFileName(xmlPath);
     }
+
+    Remember(docKey, kind, kind == "viewpoints" ? projectDir : pathIn);   // #92: loaded fine, remember it for this document
 
     string htmlPath = "", htmlMsg, htmlErr = "";
     try { htmlPath = NavData.WriteNavigator(projectDir, htmlName, picDir, htmlTitle, htmlFolder, reportName, cams); htmlMsg = "Created " + htmlPath + "."; }
