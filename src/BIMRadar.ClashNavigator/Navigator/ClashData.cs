@@ -79,7 +79,11 @@ public static class ClashData {
     return (s.Contains("resolved") || s.Contains("approved")) ? "closed" : "open";
   }
 
+  // #94: what the report lacks, in Navisworks' own option names, so the user knows exactly what to tick
+  public static readonly List<string> Missing = new List<string>();
+  public static readonly List<string> Warnings = new List<string>();
   public static List<VpCam> Load(string htmlPath, Document doc, out string title, out string picDir, out bool hasStatus) {
+    Missing.Clear(); Warnings.Clear();
     string s = System.IO.File.ReadAllText(htmlPath);
     string baseDir = System.IO.Path.GetDirectoryName(htmlPath);
     title = System.IO.Path.GetFileNameWithoutExtension(htmlPath);
@@ -120,6 +124,11 @@ public static class ClashData {
       // #89: the Path column is found by name. Reports can have extra item columns (e.g. "Layer")
       // between Item ID and Path; the old code assumed Path = Item ID + 1.
       int cPath1 = names.IndexOf("Path"), cPath2 = cPath1 >= 0 ? names.IndexOf("Path", cPath1 + 1) : -1;
+      // #94: required columns, found by header name in any order with any extra columns
+      if (cPt < 0 && !Missing.Contains("Clash Point")) Missing.Add("Clash Point");
+      if (cId1 < 0 && !Missing.Contains("Item ID")) Missing.Add("Item ID");
+      if (cPath1 < 0 && !Warnings.Contains("Item Path")) Warnings.Add("Item Path");
+      if (names.IndexOf("Image") < 0 && !Warnings.Contains("Image")) Warnings.Add("Image");
       if (cStatus >= 0) hasStatus = true;
 
       foreach (Match rm in RxRow.Matches(table)) {

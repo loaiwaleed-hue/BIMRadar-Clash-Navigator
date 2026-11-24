@@ -144,7 +144,20 @@ public static class NavigatorEntry {
       writePref("last_clash.txt", pathIn);
       bool hasStatus;
       cams = ClashData.Load(pathIn, doc, out htmlTitle, out picDir, out hasStatus);
-      if (cams.Count == 0) return "No clashes found in: " + pathIn + ". Export the report from Clash Detective as HTML (Tabular) with Clash Point and Item ID.";
+      if (cams.Count == 0) {
+        if (ClashData.Missing.Count > 0)   // #94
+          return "This clash report cannot be read: it was written without " + string.Join(" and ", ClashData.Missing) +
+                 ".\n\nIn Navisworks: Clash Detective > Report > Contents, tick " + string.Join(", ", ClashData.Missing) +
+                 " (and Item Path, Image), keep Report Format = HTML (Tabular), then Write Report again.";
+        return "No clashes found in: " + pathIn + ". Export the report from Clash Detective as HTML (Tabular) with Clash Point and Item ID.";
+      }
+      if (ClashData.Warnings.Count > 0) {   // #94: still usable, tell once what is reduced
+        string w = "This clash report was written without " + string.Join(" and ", ClashData.Warnings) + ".\n\n" +
+                   (ClashData.Warnings.Contains("Item Path") ? "- Without Item Path the model names are unknown: elements are searched by ID in the open model only (links cannot be told apart).\n" : "") +
+                   (ClashData.Warnings.Contains("Image") ? "- Without Image there are no clash pictures.\n" : "") +
+                   "\nTo fix: Clash Detective > Report > Contents, tick them, Write Report again. Continuing with what is available.";
+        try { Autodesk.Revit.UI.TaskDialog.Show("BIMRadar \u00b7 Clash Viewer", w); } catch (Exception) { }
+      }
       ClashData.ApplyNavCams(cams, pathIn, doc);   // #23
       projectDir = System.IO.Path.GetDirectoryName(pathIn);
       htmlName = System.IO.Path.GetFileNameWithoutExtension(pathIn) + "_Navigator.html";

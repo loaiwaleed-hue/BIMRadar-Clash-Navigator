@@ -73,7 +73,7 @@ public class NavHandler : IExternalEventHandler {
       itemNo++;
       var h = new Hit { Model = it.Key, Id = it.Value, Item = itemNo };   // #83: Items keeps the clash data order
       var id = NavData.Eid(it.Value);
-      if (ReviztoData.ModelMatches(it.Key, doc.Title) || !c.IsClash) {
+      if (string.IsNullOrEmpty(it.Key) || ReviztoData.ModelMatches(it.Key, doc.Title) || !c.IsClash) {   // #94: no Item Path in the report -> look in the open model
         if (doc.GetElement(id) != null) { h.Eid = id; h.Where = "found in this model"; } else h.Where = "not found in this model";
       } else {
         if (links == null) links = Links(doc);
@@ -569,6 +569,7 @@ public class NavHandler : IExternalEventHandler {
 
   static bool IsOtherModel(VpCam c, Document doc) {
     if (c.IsClash) {
+      if (c.Models.Count == 0) return false;   // #94: no Item Path in the report -> treat as this model
       if (c.Models.Any(m => ReviztoData.ModelMatches(m, doc.Title))) return false;
       var lt = Links(doc).Select(l => l.GetLinkDocument().Title).ToList();
       return !c.Models.Any(m => lt.Any(t => ReviztoData.ModelMatches(m, t)));   // a clash between linked models can still be shown
