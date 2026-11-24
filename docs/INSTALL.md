@@ -49,3 +49,13 @@ Close Revit first: the DLL is locked while Revit runs.
 
 Use [GitHub Issues](../../../issues). Say your Revit year and what you did.
 This repo is public: **do not attach client or project data** (exports, screenshots of real models, project names, file paths). Describe the problem generically or use made-up sample data.
+
+## Navisworks clash report settings (HTML)
+
+Clash Detective → Report → **Report Format: HTML (Tabular)**. The contents the owner uses (tested 2026-11-24):
+
+| Tick | Leave off (optional) |
+|---|---|
+| Summary, Clash Point, Date Found, Item Path, Item ID, Status, Description, Image, Clash Group, Grid Location | Assigned To, Date Approved, Approved By, Layer Name, Distance, Comments, Quick Properties, Simulation Dates/Event |
+
+Required for Clash Viewer: **Clash Point, Item ID, Item Path** (and **Image** for the pictures). Since #89, extra columns such as *Layer Name* no longer break the model names, but the set above is the tested one.
