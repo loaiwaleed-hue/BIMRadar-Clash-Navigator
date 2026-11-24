@@ -395,18 +395,21 @@ public class NavHandler : IExternalEventHandler {
   // toward the side the form covers, so the clash shows in the free part. SetOrientation / View3D.IsPerspective / UIView.GetWindowRectangle exist in Revit 2022-2027.
   void FitPerspective(Document doc, UIDocument uidoc, View3D v, VpCam c, List<Hit> hits, BoundingBoxXYZ clashBox) {
     try {
-      var hostHit = hits.FirstOrDefault(x => x.Found && x.Link == null && HitBox(doc, x) != null);
-      BoundingBoxXYZ bb = hostHit != null ? HitBox(doc, hostHit) : HitsBox(doc, hits);
+      // #86: frame ALL found clash elements (host + linked) completely, not only the host item
+      BoundingBoxXYZ bb = HitsBox(doc, hits);
       if (bb == null) bb = clashBox;
       if (bb == null) return;
       XYZ center = (bb.Min + bb.Max) * 0.5;
-      double r = (bb.Max - bb.Min).GetLength() / 2.0;
       XYZ target = c.HasPoint && c.Point != null ? c.Point : center;
+      // radius = farthest box corner from the target, so the whole elements stay in view around the clash point
+      double r = 0;
+      foreach (var cx in new[] { bb.Min.X, bb.Max.X }) foreach (var cy in new[] { bb.Min.Y, bb.Max.Y }) foreach (var cz in new[] { bb.Min.Z, bb.Max.Z })
+        r = Math.Max(r, new XYZ(cx, cy, cz).DistanceTo(target));
       XYZ dir = c.Fwd.Normalize();
       XYZ up = c.Up - dir * c.Up.DotProduct(dir);   // perpendicular to dir, as ClashSetup does
       if (up.GetLength() < 1e-6) return;
       up = up.Normalize();
-      double d = Math.Max(1.5 / FT, r / Math.Tan(PerspHalfFov) * 1.1);
+      double d = Math.Max(2.0 / FT, r / Math.Tan(PerspHalfFov) * 1.3);   // #86: margin 1.3 (was 1.1), min 2 m
       XYZ right = dir.CrossProduct(up).Normalize();
       int vl = 0, vt = 0, vr = 0, vb = 0; bool have = false;
       try {
