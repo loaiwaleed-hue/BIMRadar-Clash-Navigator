@@ -34,6 +34,19 @@ def _tfm(version):
     return 'net10'
 
 
+def _already_loaded():
+    """#88: reuse the copy already loaded in this Revit session (pyRevit runs each
+    click in a fresh engine), so the open Clash Viewer window is shared."""
+    from System import AppDomain
+    for a in AppDomain.CurrentDomain.GetAssemblies():
+        try:
+            if a.GetName().Name == 'BIMRadar.ClashNavigator':
+                return a
+        except Exception:
+            pass
+    return None
+
+
 def launcher(uiapp):
     """Return the BIMRadar.ClashNavigator.Launcher class for the running Revit.
 
@@ -48,7 +61,17 @@ def launcher(uiapp):
             "BIMRadar.ClashNavigator.dll not found for Revit " + str(version) + ":\n" + dll +
             "\n\nUse the pyRevit zip built by CI (it contains bin/" + tfm + ").")
     if dll not in _loaded:
-        clr.AddReferenceToFileAndPath(dll)
+        asm = _already_loaded()
+        if asm is None:
+            # #88: load from bytes, not from the file path. A DLL that came from a zip
+            # downloaded / mailed / on a network share carries the 'blocked' mark, and
+            # .NET Framework (Revit 2022-2024) refuses LoadFrom with the CAS
+            # 'loadFromRemoteSources' error. Loading the bytes avoids that and also
+            # leaves the DLL file unlocked, so updates do not need Revit closed.
+            from System.IO import File
+            from System.Reflection import Assembly
+            asm = Assembly.Load(File.ReadAllBytes(dll))
+        clr.AddReference(asm)
         _loaded[dll] = True
     from BIMRadar.ClashNavigator import Launcher
     return Launcher
