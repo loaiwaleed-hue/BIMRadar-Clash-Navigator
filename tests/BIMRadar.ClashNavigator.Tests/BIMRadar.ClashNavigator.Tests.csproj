@@ -9,6 +9,11 @@
 
   <ItemGroup>
     <Compile Include="..\..\src\BIMRadar.ClashNavigator\SettingsMigration.cs" Link="SettingsMigration.cs" />
+    <Compile Include="..\..\src\BIMRadar.ClashNavigator\ClashReportParser.cs" Link="ClashReportParser.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="fixtures\*.html" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
