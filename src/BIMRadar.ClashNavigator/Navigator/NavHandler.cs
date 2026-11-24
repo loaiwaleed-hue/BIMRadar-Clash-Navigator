@@ -342,17 +342,18 @@ public class NavHandler : IExternalEventHandler {
 
   // #84: horizontal fraction (0..0.6) of the view's width the floating window covers, and on which side (left = true). 0 = no overlap / unknown.
   // Runs on the Revit thread, which is also the thread of the modeless form (as in AICon): reading Bounds directly is fine.
-  double FormCover(SD.Rectangle vr, out bool left) {
+  double FormCover(int vLeft, int vTop, int vRight, int vBottom, out bool left) {
     left = true;
     try {
       if (Form == null || Form.IsDisposed || !Form.Visible || Form.WindowState == WF.FormWindowState.Minimized) return 0;
       var fr = Form.Bounds;   // screen pixels (top-level form)
-      if (vr.Width <= 0) return 0;
-      double ox = Math.Min(vr.Right, fr.Right) - Math.Max(vr.Left, fr.Left);
-      double oy = Math.Min(vr.Bottom, fr.Bottom) - Math.Max(vr.Top, fr.Top);
+      int vw = vRight - vLeft;
+      if (vw <= 0) return 0;
+      double ox = Math.Min(vRight, fr.Right) - Math.Max(vLeft, fr.Left);
+      double oy = Math.Min(vBottom, fr.Bottom) - Math.Max(vTop, fr.Top);
       if (ox <= 0 || oy <= 0) return 0;
-      left = (fr.Left + fr.Right) / 2.0 < (vr.Left + vr.Right) / 2.0;
-      return Math.Min(ox / vr.Width, 0.6);
+      left = (fr.Left + fr.Right) / 2.0 < (vLeft + vRight) / 2.0;
+      return Math.Min(ox / vw, 0.6);
     } catch (Exception) { return 0; }
   }
 
@@ -374,7 +375,8 @@ public class NavHandler : IExternalEventHandler {
         double r = q.DotProduct(R), u = q.DotProduct(U);
         rmin = Math.Min(rmin, r); rmax = Math.Max(rmax, r); umin = Math.Min(umin, u); umax = Math.Max(umax, u);
       }
-      bool left; double f = FormCover(uiv.GetWindowRectangle(), out left);
+      var wr = uiv.GetWindowRectangle();   // Autodesk.Revit.DB.Rectangle (not System.Drawing)
+      bool left; double f = FormCover(wr.Left, wr.Top, wr.Right, wr.Bottom, out left);
       if (f > 0.01) {   // widen on the covered side: width * f / (1 - f), so the box fills the visible (1 - f) of the view width
         double add = (rmax - rmin) * f / (1.0 - f);
         if (left) rmin -= add; else rmax += add;   // screen left = -RightDirection
