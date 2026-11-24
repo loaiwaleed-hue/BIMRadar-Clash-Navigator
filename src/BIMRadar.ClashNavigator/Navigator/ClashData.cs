@@ -78,6 +78,9 @@ public static class ClashData {
       int cGroup = names.IndexOf("Clash Group"), cName = names.IndexOf("Clash Name"), cGrid = names.IndexOf("Grid Location"),
           cDesc = names.IndexOf("Description"), cDate = names.IndexOf("Date Found"), cPt = names.IndexOf("Clash Point"), cStatus = names.IndexOf("Status");
       int cId1 = names.IndexOf("Item ID"), cId2 = cId1 >= 0 ? names.IndexOf("Item ID", cId1 + 1) : -1;
+      // #89: the Path column is found by name. Reports can have extra item columns (e.g. "Layer")
+      // between Item ID and Path; the old code assumed Path = Item ID + 1.
+      int cPath1 = names.IndexOf("Path"), cPath2 = cPath1 >= 0 ? names.IndexOf("Path", cPath1 + 1) : -1;
       if (cStatus >= 0) hasStatus = true;
 
       foreach (Match rm in RxRow.Matches(table)) {
@@ -105,10 +108,13 @@ public static class ClashData {
         if (status != "") parts.Add("Clash status: " + status);
         if (T(cGrid) != "") parts.Add("Grid " + T(cGrid));
         if (T(cDesc) != "") parts.Add(T(cDesc));
-        foreach (int ci in new[] { cId1, cId2 }) {
+        for (int item = 0; item < 2; item++) {
+          int ci = item == 0 ? cId1 : cId2;
           if (ci < 0) continue;
+          int cp = item == 0 ? cPath1 : cPath2;
+          if (cp < 0) cp = ci + 1;   // #89: fallback = old behaviour
           var em = RxEid.Match(T(ci));
-          string model = ModelOf(T(ci + 1));
+          string model = ModelOf(T(cp));
           if (model != "" && !c.Models.Contains(model)) c.Models.Add(model);
           if (em.Success) { int id; if (int.TryParse(em.Groups[1].Value, out id)) { c.Items.Add(new KeyValuePair<string, int>(model, id)); parts.Add(model + " #" + id); } }
         }
