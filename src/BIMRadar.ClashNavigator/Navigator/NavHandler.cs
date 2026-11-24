@@ -465,14 +465,14 @@ public class NavHandler : IExternalEventHandler {
       }
       if (a == "ToggleColors") {   // #80: clear / re-apply the clash colours in the current VP (or work) view
         ColorsOn = !ColorsOn;
-        View3D target = tv;
+        View3D tgtView = tv;
         var av3 = av as View3D;
-        if (av3 != null && !av3.IsTemplate && (av3.Name.StartsWith("VP-") || av3.Name.StartsWith("WIP-Clash Viewer-"))) target = av3;
-        if (target != null) {
+        if (av3 != null && !av3.IsTemplate && (av3.Name.StartsWith("VP-") || av3.Name.StartsWith("WIP-Clash Viewer-"))) tgtView = av3;
+        if (tgtView != null) {
           try {
             using (var txc = new Transaction(doc, "Clash Viewer - clash colours")) {
               txc.Start();
-              Colorize(doc, target, true, Hits);
+              Colorize(doc, tgtView, true, Hits);
               txc.Commit();
             }
           } catch (Exception) { }
