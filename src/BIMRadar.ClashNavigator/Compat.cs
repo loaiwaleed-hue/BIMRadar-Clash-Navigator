@@ -34,34 +34,5 @@ namespace BIMRadar.ClashNavigator
             if (p == null) return long.MinValue;
             return Convert.ToInt64(p.GetValue(id, null));
         }
-
-        // #81: set a RevitLinkInstance to "By host view" in view v. View.GetLinkOverrides / SetLinkOverrides and RevitLinkGraphicsSettings
-        // (property LinkVisibilityType, enum value ByHostView) are looked up by reflection: nothing breaks at compile time if a version lacks them.
-        // Returns null when nothing had to change, else a short note (what it was / why it was left). Call inside a transaction. Never throws.
-        public static string LinkToHostView(View v, ElementId linkId)
-        {
-            try
-            {
-                var get = typeof(View).GetMethod("GetLinkOverrides", new[] { typeof(ElementId) });
-                if (get == null) return "link display settings not available in this Revit version";
-                var set = typeof(View).GetMethod("SetLinkOverrides", new[] { typeof(ElementId), get.ReturnType });
-                if (set == null) return "link display settings not available in this Revit version";
-                object gs = get.Invoke(v, new object[] { linkId });
-                if (gs == null) return null;
-                var prop = gs.GetType().GetProperty("LinkVisibilityType");
-                if (prop == null) return "link display type could not be read";
-                string cur = Convert.ToString(prop.GetValue(gs, null));
-                if (cur == "ByHostView") return null;
-                if (!prop.CanWrite) return "link display is " + cur + " (left as is)";
-                prop.SetValue(gs, Enum.Parse(prop.PropertyType, "ByHostView"), null);
-                set.Invoke(v, new object[] { linkId, gs });
-                return "link display was " + cur + ", set to By host view in this view";
-            }
-            catch (Exception ex)
-            {
-                var m = ex is TargetInvocationException && ex.InnerException != null ? ex.InnerException.Message : ex.Message;
-                return "link display not changed (" + m + ")";
-            }
-        }
     }
 }

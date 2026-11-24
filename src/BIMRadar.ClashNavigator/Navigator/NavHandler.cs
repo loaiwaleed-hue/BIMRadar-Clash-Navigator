@@ -43,6 +43,7 @@ public class NavHandler : IExternalEventHandler {
     public string Model = ""; public int Id; public string Where = "";
     public ElementId Eid; public RevitLinkInstance Link;
     public string CatName = "";   // #81: category of the found element (parent category for a subcategory)
+    public int Item = 1;          // #83: item order in the clash (1 = first item of the clash data, 2 = second): decides the colour
     public bool Found { get { return Eid != null; } }
   }
 
@@ -55,8 +56,10 @@ public class NavHandler : IExternalEventHandler {
     var res = new List<Hit>();
     var src = c.IsClash ? c.Items : c.Select.Select(i => new KeyValuePair<string, int>(doc.Title, i)).ToList();
     List<RevitLinkInstance> links = null;
+    int itemNo = 0;
     foreach (var it in src) {
-      var h = new Hit { Model = it.Key, Id = it.Value };
+      itemNo++;
+      var h = new Hit { Model = it.Key, Id = it.Value, Item = itemNo };   // #83: Items keeps the clash data order
       var id = NavData.Eid(it.Value);
       if (ReviztoData.ModelMatches(it.Key, doc.Title) || !c.IsClash) {
         if (doc.GetElement(id) != null) { h.Eid = id; h.Where = "found in this model"; } else h.Where = "not found in this model";
@@ -141,13 +144,7 @@ public class NavHandler : IExternalEventHandler {
   void ApplyIsolation(Document doc, View3D v, List<Hit> hits, bool on) {
     if (v.IsInTemporaryViewMode(TemporaryViewMode.TemporaryHideIsolate)) v.DisableTemporaryViewMode(TemporaryViewMode.TemporaryHideIsolate);
     var found = hits.Where(x => x.Found).ToList();
-    // #81: every linked hit's link instance follows the host view (a per-link display setting would hide the clash categories / ignore the green override). Before colours.
-    var notes = new List<string>();
-    foreach (var li in found.Where(x => x.Link != null).Select(x => x.Link).GroupBy(x => x.Id.ToString()).Select(g => g.First())) {
-      var n = Compat.LinkToHostView(v, li.Id);
-      if (n != null) notes.Add(li.GetLinkDocument().Title + ": " + n);
-    }
-    LinkNote = string.Join("; ", notes);
+    LinkNote = "";   // #83: the link-display step of #81 is removed; Colorize may add a note
     var iso = found.Select(x => x.Link == null ? x.Eid : x.Link.Id).Distinct().ToList();
     if (on && iso.Count > 0) v.IsolateElementsTemporary(iso);
     HashSet<long> keepIds = null; HashSet<string> keepNames = null;
@@ -184,12 +181,15 @@ public class NavHandler : IExternalEventHandler {
     try { if (v.GetCategoryHidden(sb)) v.SetCategoryHidden(sb, false); } catch (Exception) { }
   }
 
-  // #80: Navisworks-style clash colours. Host elements: red solid fill + red lines (per-element override).
-  // Linked elements: the RevitLinkInstance in green (per-element overrides inside links are not available on Revit 2022).
+  // #80 / #83: Navisworks-style clash colours by ITEM ORDER (item 1 red 255,0,0; item 2 green 0,170,0), not by model.
+  // Host hit: per-element override in its item colour. Linked hit: category override (View.SetCategoryOverrides) of its category in the host view,
+  // in its item colour (in an isolated clash view only the clash categories are visible). Per-element host overrides win over category overrides.
   // OverrideGraphicSettings.SetSurfaceForegroundPatternId / -Color, SetCutForegroundPatternId / -Color, SetProjectionLineColor,
-  // SetCutLineColor and View.SetElementOverrides all exist in Revit 2022-2027 (the foreground pattern API since 2019.1).
+  // SetCutLineColor, View.SetElementOverrides and View.SetCategoryOverrides(ElementId, OverrideGraphicSettings) all exist in Revit 2022-2027
+  // (SetCategoryOverrides since 2014, the foreground pattern API since 2019.1).
   public bool ColorsOn = true;
-  readonly Dictionary<ElementId, List<ElementId>> colored = new Dictionary<ElementId, List<ElementId>>();   // view id -> element / link ids overridden by the tool
+  readonly Dictionary<ElementId, List<ElementId>> colored = new Dictionary<ElementId, List<ElementId>>();      // view id -> element ids overridden by the tool (#83)
+  readonly Dictionary<ElementId, List<ElementId>> coloredCats = new Dictionary<ElementId, List<ElementId>>();  // view id -> category ids overridden by the tool (#83)
 
   static ElementId SolidFillId(Document doc) {
     try {
@@ -205,39 +205,82 @@ public class NavHandler : IExternalEventHandler {
     return ElementId.InvalidElementId;
   }
 
+  // #83: clears the element and category overrides the tool set in this view (default OverrideGraphicSettings)
   void ClearColors(View v) {
     List<ElementId> ids;
-    if (!colored.TryGetValue(v.Id, out ids)) return;
-    foreach (var id in ids) { try { v.SetElementOverrides(id, new OverrideGraphicSettings()); } catch (Exception) { } }
-    colored.Remove(v.Id);
+    if (colored.TryGetValue(v.Id, out ids)) {
+      foreach (var id in ids) { try { v.SetElementOverrides(id, new OverrideGraphicSettings()); } catch (Exception) { } }
+      colored.Remove(v.Id);
+    }
+    if (coloredCats.TryGetValue(v.Id, out ids)) {
+      foreach (var id in ids) { try { v.SetCategoryOverrides(id, new OverrideGraphicSettings()); } catch (Exception) { } }
+      coloredCats.Remove(v.Id);
+    }
   }
 
-  // #81: surface + cut foreground = solid pattern in col, projection + cut lines in col. For a link instance the override only applies while the link is By host view (see ApplyIsolation).
-  static bool Paint(View v, ElementId id, ElementId solid, Color col) {
-    try {
-      var o = new OverrideGraphicSettings();
-      o.SetProjectionLineColor(col);
-      o.SetCutLineColor(col);
-      if (solid != null && solid != ElementId.InvalidElementId) {
-        o.SetSurfaceForegroundPatternId(solid); o.SetSurfaceForegroundPatternColor(col);
-        o.SetCutForegroundPatternId(solid); o.SetCutForegroundPatternColor(col);
-      }
-      v.SetElementOverrides(id, o);
-      return true;
-    } catch (Exception) { return false; }
+  // surface + cut foreground = solid pattern in col, projection + cut lines in col
+  static OverrideGraphicSettings Ogs(ElementId solid, Color col) {
+    var o = new OverrideGraphicSettings();
+    o.SetProjectionLineColor(col);
+    o.SetCutLineColor(col);
+    if (solid != null && solid != ElementId.InvalidElementId) {
+      o.SetSurfaceForegroundPatternId(solid); o.SetSurfaceForegroundPatternColor(col);
+      o.SetCutForegroundPatternId(solid); o.SetCutForegroundPatternColor(col);
+    }
+    return o;
   }
 
-  // clears what the previous item set in this view, then (clash + ColorsOn) colours the current hits. Never throws.
+  static bool PaintEl(View v, ElementId id, ElementId solid, Color col) {
+    try { v.SetElementOverrides(id, Ogs(solid, col)); return true; } catch (Exception) { return false; }
+  }
+
+  static bool PaintCat(View v, ElementId catId, ElementId solid, Color col) {
+    try { v.SetCategoryOverrides(catId, Ogs(solid, col)); return true; } catch (Exception) { return false; }
+  }
+
+  static Color ItemColor(int item) { return item == 2 ? new Color(0, 170, 0) : new Color(255, 0, 0); }   // #83
+  static string ItemColorName(int item) { return item == 2 ? "green" : "red"; }
+
+  // #83: the host document's category for a category found in a link: same BuiltInCategory id first, then the name (project-defined categories)
+  static ElementId HostCatId(Document doc, Category linkCat) {
+    long id = Compat.IdValue(linkCat.Id);
+    ElementId byName = null;
+    foreach (Category cat in doc.Settings.Categories) {
+      try {
+        if (Compat.IdValue(cat.Id) == id && id < 0) return cat.Id;
+        if (byName == null && cat.Name == linkCat.Name) byName = cat.Id;
+      } catch (Exception) { }
+    }
+    return byName;
+  }
+
+  // clears what the previous clash set in this view, then (clash + ColorsOn) colours the current hits by item order. Never throws.
   void Colorize(Document doc, View v, bool clash, List<Hit> hits) {
     try {
       ClearColors(v);
       if (!clash || !ColorsOn) return;
       var solid = SolidFillId(doc);
       var done = new List<ElementId>();
-      var red = new Color(255, 0, 0); var green = new Color(0, 170, 0);
-      foreach (var id in hits.Where(x => x.Found && x.Link == null).Select(x => x.Eid).Distinct().ToList()) if (Paint(v, id, solid, red)) done.Add(id);
-      foreach (var id in hits.Where(x => x.Found && x.Link != null).Select(x => x.Link.Id).Distinct().ToList()) if (Paint(v, id, solid, green)) done.Add(id);
-      colored[v.Id] = done;
+      var doneCats = new List<ElementId>();
+      colored[v.Id] = done; coloredCats[v.Id] = doneCats;   // tracked before painting, so a failure half way is still cleared next time
+      foreach (var h in hits.Where(x => x.Found && x.Link == null).OrderBy(x => x.Item))
+        if (!done.Contains(h.Eid) && PaintEl(v, h.Eid, solid, ItemColor(h.Item))) done.Add(h.Eid);
+      var catItem = new Dictionary<long, int>();
+      var notes = new List<string>();
+      foreach (var h in hits.Where(x => x.Found && x.Link != null).OrderBy(x => x.Item)) {   // item 1 first: item 1 wins a shared category
+        var lc = CatOf(doc, h);
+        var hid = lc == null ? null : HostCatId(doc, lc);
+        if (hid == null) continue;
+        long key = Compat.IdValue(hid);
+        int first;
+        if (catItem.TryGetValue(key, out first)) {
+          if (first != h.Item) notes.Add("both linked items are in category " + lc.Name + ": shown in item " + first + "'s colour (" + ItemColorName(first) + ")");
+          continue;
+        }
+        catItem[key] = h.Item;
+        if (PaintCat(v, hid, solid, ItemColor(h.Item))) doneCats.Add(hid);
+      }
+      if (notes.Count > 0) LinkNote = (string.IsNullOrEmpty(LinkNote) ? "" : LinkNote + "; ") + string.Join("; ", notes.Distinct().ToArray());
     } catch (Exception) { }
   }
 
@@ -279,9 +322,66 @@ public class NavHandler : IExternalEventHandler {
     }
     uidoc.ActiveView = nv;
     try { var uiv = uidoc.GetOpenUIViews().FirstOrDefault(u => u.ViewId == nv.Id); if (uiv != null) uiv.ZoomToFit(); } catch (Exception) { }
-    var sel = Hits.Where(x => x.Found && x.Link == null).Select(x => x.Eid).ToList();
-    if (sel.Count > 0) { try { uidoc.Selection.SetElementIds(sel); } catch (Exception) { } }
+    if (c.IsClash) { try { uidoc.Selection.SetElementIds(new List<ElementId>()); } catch (Exception) { } }   // #84: clash elements are not left selected (blue)
+    else {
+      var sel = Hits.Where(x => x.Found && x.Link == null).Select(x => x.Eid).ToList();
+      if (sel.Count > 0) { try { uidoc.Selection.SetElementIds(sel); } catch (Exception) { } }
+    }
     return nv.Name;
+  }
+
+  // #84: union of the found hits' bounding boxes (host, and linked through the link transform: HitBox); null when none
+  internal static BoundingBoxXYZ HitsBox(Document doc, List<Hit> hits) {
+    var boxes = hits.Select(x => HitBox(doc, x)).Where(b => b != null).ToList();
+    if (boxes.Count == 0) return null;
+    var r = new BoundingBoxXYZ();
+    r.Min = new XYZ(boxes.Min(b => b.Min.X), boxes.Min(b => b.Min.Y), boxes.Min(b => b.Min.Z));
+    r.Max = new XYZ(boxes.Max(b => b.Max.X), boxes.Max(b => b.Max.Y), boxes.Max(b => b.Max.Z));
+    return r;
+  }
+
+  // #84: horizontal fraction (0..0.6) of the view's width the floating window covers, and on which side (left = true). 0 = no overlap / unknown.
+  // Runs on the Revit thread, which is also the thread of the modeless form (as in AICon): reading Bounds directly is fine.
+  double FormCover(SD.Rectangle vr, out bool left) {
+    left = true;
+    try {
+      if (Form == null || Form.IsDisposed || !Form.Visible || Form.WindowState == WF.FormWindowState.Minimized) return 0;
+      var fr = Form.Bounds;   // screen pixels (top-level form)
+      if (vr.Width <= 0) return 0;
+      double ox = Math.Min(vr.Right, fr.Right) - Math.Max(vr.Left, fr.Left);
+      double oy = Math.Min(vr.Bottom, fr.Bottom) - Math.Max(vr.Top, fr.Top);
+      if (ox <= 0 || oy <= 0) return 0;
+      left = (fr.Left + fr.Right) / 2.0 < (vr.Left + vr.Right) / 2.0;
+      return Math.Min(ox / vr.Width, 0.6);
+    } catch (Exception) { return 0; }
+  }
+
+  // #84: zoom the VP view to the clash elements (box grown 15% + 0.3 m), widened toward the side the window covers so they centre in the visible part.
+  // UIView.ZoomAndCenterRectangle(XYZ, XYZ), UIView.GetWindowRectangle() and View.RightDirection / UpDirection exist in Revit 2022-2027. Never throws.
+  void ZoomToHits(Document doc, UIDocument uidoc, View3D v, List<Hit> hits) {
+    try {
+      var bb = HitsBox(doc, hits);
+      if (bb == null) return;
+      var uiv = uidoc.GetOpenUIViews().FirstOrDefault(u => u.ViewId == v.Id);
+      if (uiv == null) return;
+      XYZ ctr = (bb.Min + bb.Max) * 0.5;
+      double m = 0.3 / FT;
+      XYZ half = new XYZ((bb.Max.X - bb.Min.X) / 2.0 * 1.15 + m, (bb.Max.Y - bb.Min.Y) / 2.0 * 1.15 + m, (bb.Max.Z - bb.Min.Z) / 2.0 * 1.15 + m);
+      XYZ R = v.RightDirection, U = v.UpDirection;
+      double rmin = double.MaxValue, rmax = double.MinValue, umin = double.MaxValue, umax = double.MinValue;
+      foreach (double sx in new[] { -1.0, 1.0 }) foreach (double sy in new[] { -1.0, 1.0 }) foreach (double sz in new[] { -1.0, 1.0 }) {
+        XYZ q = new XYZ(ctr.X + sx * half.X, ctr.Y + sy * half.Y, ctr.Z + sz * half.Z);
+        double r = q.DotProduct(R), u = q.DotProduct(U);
+        rmin = Math.Min(rmin, r); rmax = Math.Max(rmax, r); umin = Math.Min(umin, u); umax = Math.Max(umax, u);
+      }
+      bool left; double f = FormCover(uiv.GetWindowRectangle(), out left);
+      if (f > 0.01) {   // widen on the covered side: width * f / (1 - f), so the box fills the visible (1 - f) of the view width
+        double add = (rmax - rmin) * f / (1.0 - f);
+        if (left) rmin -= add; else rmax += add;   // screen left = -RightDirection
+      }
+      XYZ baseP = ctr - R * ctr.DotProduct(R) - U * ctr.DotProduct(U);   // keeps the box centre's depth
+      uiv.ZoomAndCenterRectangle(baseP + R * rmin + U * umin, baseP + R * rmax + U * umax);
+    } catch (Exception) { }
   }
 
   // width / height of the picture (falls back to the camera aspect)
@@ -499,7 +599,7 @@ public class NavHandler : IExternalEventHandler {
             }
           } catch (Exception) { }
         }
-        if (Form != null && !Form.IsDisposed) { Form.SyncColors(); Form.ShowMessage(ColorsOn ? "Clash colours applied (host red, linked green)." : "Clash colours cleared in this view."); }
+        if (Form != null && !Form.IsDisposed) { Form.SyncColors(); Form.ShowMessage(ColorsOn ? "Clash colours applied (item 1 red, item 2 green)." : "Clash colours cleared in this view."); }
         return;
       }
       if (a == "Pick") {
@@ -611,6 +711,7 @@ public class NavHandler : IExternalEventHandler {
 
       if (uidoc.ActiveView == null || uidoc.ActiveView.Id != tv.Id) uidoc.ActiveView = tv;
       try { var uiv = uidoc.GetOpenUIViews().FirstOrDefault(u => u.ViewId == tv.Id); if (uiv != null) uiv.ZoomToFit(); } catch (Exception) { }
+      if (c.IsClash && uidoc.ActiveView != null && uidoc.ActiveView.Id == tv.Id) ZoomToHits(doc, uidoc, tv, hits);   // #84: after the transaction, view active
       // close the tabs of earlier work views (they stay in the project): every extra open 3D view with links makes Revit slower
       try {
         foreach (var u in uidoc.GetOpenUIViews()) {
@@ -618,8 +719,12 @@ public class NavHandler : IExternalEventHandler {
           if (vv != null && vv.Id != tv.Id && vv.Name.StartsWith("WIP-Clash Viewer-VP-")) u.Close();
         }
       } catch (Exception) { }
-      var sel = hits.Where(x => x.Found && x.Link == null).Select(x => x.Eid).Distinct().ToList();
-      if (sel.Count > 0) { try { uidoc.Selection.SetElementIds(sel); } catch (Exception) { } }
+      // #84: a clash is never left selected (blue); only the ID buttons (action "Pick", returns above) select on purpose
+      if (c.IsClash) { try { uidoc.Selection.SetElementIds(new List<ElementId>()); } catch (Exception) { } }
+      else {
+        var sel = hits.Where(x => x.Found && x.Link == null).Select(x => x.Eid).Distinct().ToList();
+        if (sel.Count > 0) { try { uidoc.Selection.SetElementIds(sel); } catch (Exception) { } }
+      }
       Cur = target;
       if (!c.IsClash && Source.StartsWith("Revizto") && a != "GotoElement") ComputeLoc(doc, c, hits);   // #72 / #73: read-only, after the commit
       if (Form != null && !Form.IsDisposed) { Form.RefreshLoc(target); if (hits.Count > 0) Form.ShowSelection(hits.Count(x => x.Found), hits.Count, c.IsClash, LinkNote); /* #81 */ Form.ShowTime(sw.ElapsedMilliseconds); }
