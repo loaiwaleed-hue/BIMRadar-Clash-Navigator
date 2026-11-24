@@ -274,7 +274,7 @@ public class NavHandler : IExternalEventHandler {
         long key = Compat.IdValue(hid);
         int first;
         if (catItem.TryGetValue(key, out first)) {
-          if (first != h.Item) notes.Add("both linked items are in category " + lc.Name + ": shown in item " + first + "'s colour (" + ItemColorName(first) + ")");
+          if (first != h.Item) notes.Add("Both clash elements are not from this model (both in linked models, category " + lc.Name + "): both shown in item " + first + "'s colour (" + ItemColorName(first) + ")");   // owner wording 2026-11-24
           continue;
         }
         catItem[key] = h.Item;
