@@ -1,7 +1,7 @@
 # Changelog
 
 ## Unreleased
-- Nothing yet.
+- Review panel now has one button, Clash Viewer. The ribbon Next / Previous buttons were removed (owner decision 2026-11-24); Next / Previous stay in the window.
 
 ## v0.1.0 (unreleased, waiting for owner test #67)
 - #55: Three builds (net48, net8.0-windows, net10.0-windows) with CI, unit tests, zips and an unzipped `test-build` branch.

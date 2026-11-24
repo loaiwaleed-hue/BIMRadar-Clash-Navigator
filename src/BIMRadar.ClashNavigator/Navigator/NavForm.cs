@@ -538,6 +538,7 @@ public class NavForm : WF.Form {
     if (go && H.Order.Count > 0) { H.Cur = 0; Go("Goto", 1); }
   }
 
+  // No ribbon button uses GoNext / GoPrevious since the 2026-11-24 owner decision (Next / Previous live in the window); kept for possible later use.
   public void GoNext() { Go("Next", 0); }
   public void GoPrevious() { Go("Prev", 0); }
 

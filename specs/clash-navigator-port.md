@@ -9,10 +9,10 @@ Clash Navigator runs from the **BIMRadar** ribbon tab without AICon. It installs
 ## User stories
 
 ### A. Ribbon
-- **A1** As a BIM coordinator, I want a **BIMRadar** tab with a **Review** panel holding **Clash Navigator** (large), **Next ▸** and **◂ Previous** (small), so that I open and step through issues without AICon.
+- **A1** As a BIM coordinator, I want a **BIMRadar** tab with a **Review** panel holding one large **Clash Viewer** button (the small Next / Previous ribbon buttons were dropped by the owner, 2026-11-24), so that I open and step through issues without AICon.
 - **A2** As the owner, I want the Review panel to sit in the same BIMRadar tab as the panels from my other repos (Check, Fix…), so that all my tools live in one place.
 - **A3** As a user, I want a blue line icon for each button (Review accent colour) and a short tooltip, so that the buttons are recognisable.
-- **A4** As a user, I want **Next / Previous** to move the open navigator. When no navigator is open, they say so in one line and do not error, so that I can map them to keyboard shortcuts safely.
+- **A4** ~~As a user, I want **Next / Previous** to move the open navigator. When no navigator is open, they say so in one line and do not error, so that I can map them to keyboard shortcuts safely.~~ **Dropped by the owner, 2026-11-24:** the window's own Next / Previous are enough.
 
 ### B. Behaviour kept from AICon
 - **B1** As a user, I want clicking Clash Navigator to open the **source dialog first** (1 Navisworks clash test, 2 Navisworks viewpoints, 3 Revizto issues, with the "How to use" guide). AICon's "press Run" window is gone.

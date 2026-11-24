@@ -30,8 +30,8 @@ The icons are original drawings, not copies of Autodesk icons.
 | `clash-viewer` | Review |
 | `issues` | Review |
 | `viewpoints` | Review |
-| `next` | Review |
-| `previous` | Review |
+| `next` | Review (not used in the ribbon) |
+| `previous` | Review (not used in the ribbon) |
 | `model-health` | Health |
 | `warnings` | Health |
 | `qaqc-check` | Check |
@@ -58,4 +58,4 @@ for f in clash-viewer next previous issues viewpoints model-health warnings qaqc
 done
 ```
 
-Then copy the light PNGs to `src/BIMRadar.ClashNavigator/Resources/` as `ClashViewer32.png`, `ClashViewer16.png`, `Next32.png`, `Next16.png`, `Previous32.png`, `Previous16.png`. For pyRevit buttons, copy the 32 px light PNG to each pushbutton's `icon.png` and the dark 32 px PNG to `icon.dark.png`.
+Then copy the light PNGs to `src/BIMRadar.ClashNavigator/Resources/` as `ClashViewer32.png`, `ClashViewer16.png` (the next / previous icons are not used in the ribbon, so they are not copied). For pyRevit buttons, copy the 32 px light PNG to each pushbutton's `icon.png` and the dark 32 px PNG to `icon.dark.png`.

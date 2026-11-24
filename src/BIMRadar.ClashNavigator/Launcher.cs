@@ -37,6 +37,7 @@ namespace BIMRadar.ClashNavigator
             }
         }
 
+        // No ribbon button uses this since the 2026-11-24 owner decision (Next / Previous live in the window); kept for possible later use.
         /// <summary>Steps the open Clash Viewer to the next item (same path as its Next button).</summary>
         public static void Next(UIApplication uiapp)
         {

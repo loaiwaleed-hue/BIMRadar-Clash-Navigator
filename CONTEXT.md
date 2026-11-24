@@ -13,7 +13,7 @@ The tool's user-facing name is **Clash Viewer** (owner, 2026-11-23); the interna
   - **Review**: Clash Navigator, warnings navigator
   - **Audit**: ISO 19650 / BEP / client standards
 - Icons: full-colour BIM symbol set (owner, 2026-11-23), 32 px large / 16 px small, light + dark variants. See `assets/icons/README.md`.
-- This repo adds to **Review**: a large **Clash Navigator** button + small **Next ▸** / **◂ Previous** buttons (#48).
+- This repo adds to **Review**: one large **Clash Viewer** button (Next/Previous removed by the owner 2026-11-24, they live in the window) (#48).
 - Each tool is public or private by the owner's choice, decided per tool. **This repo is PUBLIC** (MIT).
 - Sister repo: `loaiwaleed-hue/qaqc-checker` (private: LOI Compliance Report, Select IDs, Fix Element IDs, Fix Type Names). It moves under the BIMRadar tab in a later ticket in that repo.
 

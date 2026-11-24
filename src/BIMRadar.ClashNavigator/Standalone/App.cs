@@ -77,18 +77,7 @@ namespace BIMRadar.ClashNavigator.Standalone
             openData.ToolTip = "Step through Navisworks clash tests, saved viewpoints or Revizto issues in Revit, with a web report and Excel export.";
             SetImages(openData, "ClashViewer");
 
-            string nextPrevTip = "Go to the next/previous item in the open Clash Viewer (assign a keyboard shortcut in Revit).";
-            var nextData = new PushButtonData("BIMRadar_ClashNavigator_Next", "Next \u25B8", asm, ns + "NextCommand");
-            nextData.ToolTip = nextPrevTip;
-            SetImages(nextData, "Next");
-
-            var prevData = new PushButtonData("BIMRadar_ClashNavigator_Previous", "\u25C2 Previous", asm, ns + "PreviousCommand");
-            prevData.ToolTip = nextPrevTip;
-            SetImages(prevData, "Previous");
-
             panel.AddItem(openData);
-            // AddStackedItems(RibbonItemData, RibbonItemData) exists in Revit 2022-2027.
-            panel.AddStackedItems(nextData, prevData);
         }
 
         private static void SetImages(PushButtonData data, string baseName)
