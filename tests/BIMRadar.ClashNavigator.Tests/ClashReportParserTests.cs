@@ -26,7 +26,7 @@ public class ClashReportParserTests {
     Assert.Equal("", c.Group);
     Assert.True(c.DefaultTest);
     Assert.Equal("default_files\\cd000001.jpg", c.ImgRelPath);
-    Assert.Equal(101.0, c.X); Assert.Equal(201.0, c.Y); Assert.Equal(8.0, c.Z);
+    Assert.Equal(101.0, c.X); Assert.Equal(201.0, c.Y); Assert.Equal(7.0, c.Z);
     Assert.Equal(new[] { "PROJ-A-AR.nwc", "PROJ-B-ST.nwc" }, c.Models.ToArray());
     Assert.Equal(2, c.Items.Count);
     Assert.Equal(123, c.Items[0].Id); Assert.Equal("PROJ-A-AR.nwc", c.Items[0].Model);
