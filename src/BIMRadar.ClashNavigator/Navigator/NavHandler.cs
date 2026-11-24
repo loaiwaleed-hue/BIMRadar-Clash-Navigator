@@ -141,18 +141,91 @@ public class NavHandler : IExternalEventHandler {
     ApplyCategories(doc, v, keep);
   }
 
-  // #68: VP / work views open shaded at medium detail (skipped when a view template controls them; a refusal never breaks navigation)
-  static void ShadedMedium(View v) {
+  // #68 / #77: VP / work views open shaded at Fine detail (skipped when a view template controls them; a refusal never breaks navigation)
+  static void ShadedFine(View v) {
     try { if (v.ViewTemplateId != ElementId.InvalidElementId) return; } catch (Exception) { return; }
     try { v.DisplayStyle = DisplayStyle.Shading; } catch (Exception) { }
-    try { v.DetailLevel = ViewDetailLevel.Medium; } catch (Exception) { }
+    try { v.DetailLevel = ViewDetailLevel.Fine; } catch (Exception) { }   // #77
   }
+
+  // #77: every annotation category hidden except the section box (stays visible). Skipped when a view template controls the view.
+  // View.CanCategoryBeHidden(ElementId) / SetCategoryHidden / GetCategoryHidden exist in Revit 2022-2027. Call inside a transaction.
+  static void HideAnnotationsExceptSectionBox(View v) {
+    try { if (v.ViewTemplateId != ElementId.InvalidElementId) return; } catch (Exception) { return; }
+    Document doc = v.Document;
+    var sb = new ElementId(BuiltInCategory.OST_SectionBox);
+    foreach (Category cat in doc.Settings.Categories) {
+      try {
+        if (cat.CategoryType != CategoryType.Annotation || cat.Id.Equals(sb)) continue;
+        if (v.CanCategoryBeHidden(cat.Id) && !v.GetCategoryHidden(cat.Id)) v.SetCategoryHidden(cat.Id, true);
+      } catch (Exception) { }
+    }
+    try { if (v.GetCategoryHidden(sb)) v.SetCategoryHidden(sb, false); } catch (Exception) { }
+  }
+
+  // #80: Navisworks-style clash colours. Host elements: red solid fill + red lines (per-element override).
+  // Linked elements: the RevitLinkInstance in green (per-element overrides inside links are not available on Revit 2022).
+  // OverrideGraphicSettings.SetSurfaceForegroundPatternId / -Color, SetCutForegroundPatternId / -Color, SetProjectionLineColor,
+  // SetCutLineColor and View.SetElementOverrides all exist in Revit 2022-2027 (the foreground pattern API since 2019.1).
+  public bool ColorsOn = true;
+  readonly Dictionary<ElementId, List<ElementId>> colored = new Dictionary<ElementId, List<ElementId>>();   // view id -> element / link ids overridden by the tool
+
+  static ElementId SolidFillId(Document doc) {
+    try {
+      var fp = FillPatternElement.GetFillPatternElementByName(doc, FillPatternTarget.Drafting, "<Solid fill>");
+      if (fp != null) return fp.Id;
+    } catch (Exception) { }
+    try {
+      foreach (FillPatternElement e in new FilteredElementCollector(doc).OfClass(typeof(FillPatternElement))) {
+        var p = e.GetFillPattern();
+        if (p != null && p.IsSolidFill && p.Target == FillPatternTarget.Drafting) return e.Id;
+      }
+    } catch (Exception) { }
+    return ElementId.InvalidElementId;
+  }
+
+  void ClearColors(View v) {
+    List<ElementId> ids;
+    if (!colored.TryGetValue(v.Id, out ids)) return;
+    foreach (var id in ids) { try { v.SetElementOverrides(id, new OverrideGraphicSettings()); } catch (Exception) { } }
+    colored.Remove(v.Id);
+  }
+
+  static bool Paint(View v, ElementId id, ElementId solid, Color col) {
+    try {
+      var o = new OverrideGraphicSettings();
+      o.SetProjectionLineColor(col);
+      o.SetCutLineColor(col);
+      if (solid != null && solid != ElementId.InvalidElementId) {
+        o.SetSurfaceForegroundPatternId(solid); o.SetSurfaceForegroundPatternColor(col);
+        o.SetCutForegroundPatternId(solid); o.SetCutForegroundPatternColor(col);
+      }
+      v.SetElementOverrides(id, o);
+      return true;
+    } catch (Exception) { return false; }
+  }
+
+  // clears what the previous item set in this view, then (clash + ColorsOn) colours the current hits. Never throws.
+  void Colorize(Document doc, View v, bool clash, List<Hit> hits) {
+    try {
+      ClearColors(v);
+      if (!clash || !ColorsOn) return;
+      var solid = SolidFillId(doc);
+      var done = new List<ElementId>();
+      var red = new Color(255, 0, 0); var green = new Color(0, 170, 0);
+      foreach (var id in hits.Where(x => x.Found && x.Link == null).Select(x => x.Eid).Distinct().ToList()) if (Paint(v, id, solid, red)) done.Add(id);
+      foreach (var id in hits.Where(x => x.Found && x.Link != null).Select(x => x.Link.Id).Distinct().ToList()) if (Paint(v, id, solid, green)) done.Add(id);
+      colored[v.Id] = done;
+    } catch (Exception) { }
+  }
+
+  public Dictionary<int, bool> OtherIdx = new Dictionary<int, bool>();   // #79: VpCam.Index -> anchored to a model that is not the open one (IsOtherModel)
 
   // orthographic copy of the VP view to work in: same look direction, same section box (or one around the item), found elements isolated if Isolate is on
   string DuplicateOrtho(UIDocument uidoc, View3D tv, VpCam c) {
     var doc = uidoc.Document;
     var names = new HashSet<string>(new FilteredElementCollector(doc).OfClass(typeof(View)).Cast<View>().Select(v => v.Name), StringComparer.OrdinalIgnoreCase);
-    string baseName = "Work - " + tv.Name, nm = baseName;
+    string baseName = /* #78 */ "WIP-Clash Viewer-" + tv.Name, nm = baseName;
     for (int i = 2; names.Contains(nm); i++) nm = baseName + " (" + i + ")";
     View3D nv;
     using (var tx = new Transaction(doc, "Clash Viewer - orthographic work view")) {
@@ -162,15 +235,10 @@ public class NavHandler : IExternalEventHandler {
       try { nv.Name = nm; } catch (Exception) { }
       // work view: no view template, every annotation category off, only the section box shown
       try { if (nv.ViewTemplateId != ElementId.InvalidElementId) nv.ViewTemplateId = ElementId.InvalidElementId; } catch (Exception) { }
-      var sbCat = new ElementId(BuiltInCategory.OST_SectionBox);
-      foreach (Category cat in doc.Settings.Categories) {
-        if (cat.CategoryType != CategoryType.Annotation || cat.Id == sbCat) continue;
-        try { if (nv.CanCategoryBeHidden(cat.Id)) nv.SetCategoryHidden(cat.Id, true); } catch (Exception) { }
-      }
-      try { nv.SetCategoryHidden(sbCat, false); } catch (Exception) { }
+      HideAnnotationsExceptSectionBox(nv);   // #77: shared with the VP view (was inline here)
       var o = tv.GetOrientation();
       nv.SetOrientation(new ViewOrientation3D(o.EyePosition, o.UpDirection, o.ForwardDirection));
-      ShadedMedium(nv);   // #68
+      ShadedFine(nv);   // #68 / #77
       nv.CropBoxActive = false; nv.CropBoxVisible = false;
       if (c.IsClash) {   // #74: clash work view: same clash box when Section box is on, none when off (isolation stays)
         if (UseBox) { XYZ l0, h0; nv.SetSectionBox(ClashBox(doc, c, Hits, out l0, out h0)); nv.IsSectionBoxActive = true; }
@@ -184,6 +252,7 @@ public class NavHandler : IExternalEventHandler {
         nv.SetSectionBox(bb); nv.IsSectionBoxActive = true;
       }
       ApplyIsolation(doc, nv, Hits, (Isolated && !Source.StartsWith("Revizto")) || c.IsClash);   // #69
+      Colorize(doc, nv, c.IsClash, Hits);   // #80
       tx.Commit();
     }
     uidoc.ActiveView = nv;
@@ -394,6 +463,23 @@ public class NavHandler : IExternalEventHandler {
         if (Form != null && !Form.IsDisposed) { Form.Sync(cur); Form.ShowSaved(saved); }
         return;
       }
+      if (a == "ToggleColors") {   // #80: clear / re-apply the clash colours in the current VP (or work) view
+        ColorsOn = !ColorsOn;
+        View3D target = tv;
+        var av3 = av as View3D;
+        if (av3 != null && !av3.IsTemplate && (av3.Name.StartsWith("VP-") || av3.Name.StartsWith("WIP-Clash Viewer-"))) target = av3;
+        if (target != null) {
+          try {
+            using (var txc = new Transaction(doc, "Clash Viewer - clash colours")) {
+              txc.Start();
+              Colorize(doc, target, true, Hits);
+              txc.Commit();
+            }
+          } catch (Exception) { }
+        }
+        if (Form != null && !Form.IsDisposed) { Form.SyncColors(); Form.ShowMessage(ColorsOn ? "Clash colours applied (host red, linked green)." : "Clash colours cleared in this view."); }
+        return;
+      }
       if (a == "Pick") {
         string msg = (PickIndex >= 0 && PickIndex < Hits.Count) ? Pick(uidoc, Hits[PickIndex]) : "Nothing to select.";
         if (Form != null && !Form.IsDisposed) Form.ShowMessage(msg);
@@ -415,7 +501,7 @@ public class NavHandler : IExternalEventHandler {
       if (a == "Duplicate") {
         if (tv == null || cur < 1 || cur > count) { if (Form != null && !Form.IsDisposed) Form.ShowError("Open a VP view first (click Next or Previous), then duplicate it."); return; }
         string made = DuplicateOrtho(uidoc, tv, Cams[cur - 1]);
-        if (Form != null && !Form.IsDisposed) Form.ShowMessage("Created \"" + made + "\": orthographic, no crop, annotations off, same section box" + (Cams[cur - 1].IsClash ? ", clashing elements isolated" : "") + ". Next / Previous go back to the VP view.");
+        if (Form != null && !Form.IsDisposed) Form.ShowMessage("Created \"" + made + "\": orthographic, no crop, annotations off (section box kept), same section box" + (Cams[cur - 1].IsClash ? ", clashing elements isolated" : "") + ". Next / Previous go back to the VP view.");
         return;
       }
 
@@ -429,7 +515,9 @@ public class NavHandler : IExternalEventHandler {
 
       var c = Cams[target - 1];
       // item anchored to a different model: preview only, the Revit view does not move
-      if (NotHere(c, doc)) {
+      bool other = IsOtherModel(c, doc);
+      OtherIdx[c.Index] = other;   // #79
+      if (other && !SearchHit.Contains(c.Index)) {
         Cur = target;
         Hits = (c.IsClash ? c.Items : c.Select.Select(i => new KeyValuePair<string, int>(c.Model, i)).ToList())
           .Select(it => new Hit { Model = it.Key, Id = it.Value, Where = "model not open / not linked" }).ToList();
@@ -465,7 +553,8 @@ public class NavHandler : IExternalEventHandler {
         }
         if (tv.Name != nm) { try { tv.Name = nm; } catch (Exception) { tv.Name = nm + " (" + tv.Id.ToString() + ")"; } }
         tv.SetOrientation(new ViewOrientation3D(eyeP, upP, fwdP));
-        ShadedMedium(tv);   // #68
+        ShadedFine(tv);   // #68 / #77
+        HideAnnotationsExceptSectionBox(tv);   // #77
 
         // same field of view and picture shape as the source picture
         if (c.FovH > 0.01 && c.FovH < 3.0) {
@@ -493,6 +582,7 @@ public class NavHandler : IExternalEventHandler {
         }
         // clash: always only the clashing elements; Revizto: when "Isolate in 3D view" is on
         ApplyIsolation(doc, tv, hits, (Isolated && !Source.StartsWith("Revizto")) || c.IsClash);   // #69
+        Colorize(doc, tv, c.IsClash, hits);   // #80: after isolation + section box; failures are swallowed
         tx.Commit();
       }
 
@@ -502,7 +592,7 @@ public class NavHandler : IExternalEventHandler {
       try {
         foreach (var u in uidoc.GetOpenUIViews()) {
           var vv = doc.GetElement(u.ViewId) as View;
-          if (vv != null && vv.Id != tv.Id && vv.Name.StartsWith("Work - VP-")) u.Close();
+          if (vv != null && vv.Id != tv.Id && vv.Name.StartsWith("WIP-Clash Viewer-VP-")) u.Close();
         }
       } catch (Exception) { }
       var sel = hits.Where(x => x.Found && x.Link == null).Select(x => x.Eid).Distinct().ToList();

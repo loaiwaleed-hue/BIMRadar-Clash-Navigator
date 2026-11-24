@@ -38,7 +38,7 @@ public class NavForm : WF.Form {
   string appliedKey = null;                    // model filter that H.Order currently reflects
   string sourceWord;
 
-  WF.Button btnIso, btnDup;
+  WF.Button btnIso, btnDup, btnColor;   // #80: btnColor = Clear / Create override (clash source only)
   WF.ComboBox cmbSt;
   static readonly string[] StKeys = { "open", "closed", "clarify", "others" };
   WF.Label lblDone;
@@ -144,7 +144,8 @@ public class NavForm : WF.Form {
     btnIso = new WF.Button { Left = 12, Top = y, Width = 176, Height = 34, Text = "Isolate in 3D view", Visible = !noIso, Enabled = false };
     btnSnap = new WF.Button { Left = noIso ? 12 : 192, Top = y, Width = noIso ? 356 : 176, Height = 34, Text = "Save solved snapshot", Font = new SD.Font("Segoe UI Semibold", 9.5f) };
     y += 40;
-    btnDup = new WF.Button { Left = 12, Top = y, Width = 356, Height = 32, Text = "Duplicate 3D view" };
+    btnDup = new WF.Button { Left = 12, Top = y, Width = isClash ? 232 : 356, Height = 32, Text = "Duplicate 3D view" };
+    btnColor = new WF.Button { Left = 248, Top = y, Width = 120, Height = 32, Text = "Clear override", Visible = isClash };   // #80: right of Duplicate 3D view, same row
     btnGoto = new WF.Button { Left = 248, Top = y, Width = 120, Height = 32, Text = "Go to element", Visible = false };   // #73: shown only when an element is far from the point
     y += 38;
     var lblAct = new WF.Label { Left = 12, Top = y, Width = 84, Height = 16, ForeColor = SD.Color.DimGray, Font = new SD.Font("Segoe UI", 8.5f), Text = "Action status" };
@@ -188,10 +189,10 @@ public class NavForm : WF.Form {
     tip.SetToolTip(btnIso, "Temporarily isolate the found elements in the VP view. Click again to restore the original clash view.");
     tip.SetToolTip(btnPick[0], "Select by ID: select this element in Revit (found by its Element ID)");
     tip.SetToolTip(btnPick[1], "Select by ID: select this element in Revit (found by its Element ID)");
-    tip.SetToolTip(btnDup, "Orthographic copy of this view (Work - VP-...): same direction and section box, all annotations off. Fix the issue there; the VP view stays for the snapshot.");
+    tip.SetToolTip(btnDup, "Orthographic copy of this view (WIP-Clash Viewer-VP-...): same direction and section box, all annotations off. Fix the issue there; the VP view stays for the snapshot.");
     tip.SetToolTip(cmbSt, "Action status (your own): Open / Closed / Need clarification / Action by others (another contractor has to act). The Revizto / clash status from the source is shown in the info line above and in Filter. Shared with the web navigator (navigator_status.json in the picture folder). New items start as Open.");
     Controls.AddRange(new WF.Control[] { lblName, lblCount, lblInfo, btnPrev, btnNext, lblModel, cmbModel, lblMS, txtMS, tagPanel, lblTest, cmbTest, lblSub, cmbSub, txtSub, cmbSubSt, cmbStamp, lblAct, cmb,
-      btnPick[0], lblItem[0], btnPick[1], lblItem[1], chk, lblSize, num, btnIso, btnSnap, btnDup, cmbSt, lblDone, btnWeb, btnOpen, lblCm, txtComment, btnPost, rbBefore, rbAfter, pic, lblPic, lblWhy1, lblWhy2, lblWhy3, lblHint, chkHide, btnCheck, btnGoto });
+      btnPick[0], lblItem[0], btnPick[1], lblItem[1], chk, lblSize, num, btnIso, btnSnap, btnDup, btnColor, cmbSt, lblDone, btnWeb, btnOpen, lblCm, txtComment, btnPost, rbBefore, rbAfter, pic, lblPic, lblWhy1, lblWhy2, lblWhy3, lblHint, chkHide, btnCheck, btnGoto });
 
     // model list: "All" first, then every model with its count; default = the model that matches the open file
     var groups = H.Cams.SelectMany(c => c.Models.Count > 0 ? c.Models : new List<string> { c.Model ?? "" }).GroupBy(m => m, StringComparer.OrdinalIgnoreCase).OrderBy(g => g.Key == "" ? "~" : g.Key, StringComparer.OrdinalIgnoreCase).ToList();
@@ -218,6 +219,8 @@ public class NavForm : WF.Form {
     btnIso.Click += (s, e) => Go("Isolate", 0);
     btnDup.Click += (s, e) => Go("Duplicate", 0);
     btnGoto.Click += (s, e) => Go("GotoElement", 0);   // #73
+    btnColor.Click += (s, e) => Go("ToggleColors", 0);   // #80
+    tip.SetToolTip(btnColor, "Clash colours in the current view: the element in this model red (solid fill), the linked element green (its link). Click to clear them; the button then re-applies them.");
     btnCheck.Click += (s, e) => { ShowMessage("Checking locations..."); Go("CheckAll", 0); };   // #72
     chkHide.CheckedChanged += (s, e) => { if (!syncing) SubFilterChanged(); };   // #72
     tip.SetToolTip(chkHide, "Hide issues that have nothing from this model at their location (found by visiting them or by Check locations). Issues not checked yet stay in the list.");
@@ -543,7 +546,7 @@ public class NavForm : WF.Form {
   public void GoPrevious() { Go("Prev", 0); }
 
   void Go(string action, int idx) {
-    if (action != "Goto" && action != "Snapshot" && action != "CheckAll" && EnsureFilter()) return; // model changed: already jumped to its first item
+    if (action != "Goto" && action != "Snapshot" && action != "CheckAll" && action != "ToggleColors" && EnsureFilter()) return; // model changed: already jumped to its first item
     H.Action = action; H.GoTo = idx;
     H.UseBox = chk.Checked; H.BoxM = (double)num.Value;
     Ev.Raise();
@@ -613,12 +616,16 @@ public class NavForm : WF.Form {
       ShowDoneInfo(c);
       ShowHits();
       ShowWhy(c);   // #70 / #71
+      SyncColors();   // #80
       btnIso.Text = H.Isolated ? "Restore original view" : "Isolate in 3D view";
       btnIso.BackColor = H.Isolated ? SD.Color.FromArgb(255, 236, 179) : SD.Color.Empty; btnIso.UseVisualStyleBackColor = !H.Isolated;
       btnIso.Enabled = H.Isolated || (H.Cur == n && H.Hits.Any(x => x.Found));
       ShowPicture();
     } finally { syncing = false; }
   }
+
+  // #80: button text follows the handler state
+  public void SyncColors() { btnColor.Text = H.ColorsOn ? "Clear override" : "Create override"; }
 
   // #70 / #71: line 1 = anchor model / zone (amber "Not anchored to a model" for a Revizto issue without anchor model),
   // line 2 = why the item is in the list, from the search group (same keys as SearchGroup / BuildSearch)
@@ -643,14 +650,20 @@ public class NavForm : WF.Form {
     // #72 / #73: third line = what is at the location; yellow hint; Go to element when an element is far from the point
     NavHandler.LocResult lr = null;
     if (isRevizto) H.Loc.TryGetValue(c.Index, out lr);
-    if (lr == null) lblWhy3.Text = "";
+    bool other = false;
+    if (isRevizto) H.OtherIdx.TryGetValue(c.Index, out other);
+    if (other) {   // #79: takes precedence over the grey summary; merges the empty-view warning
+      lblWhy3.ForeColor = SD.Color.Firebrick;
+      lblWhy3.Text = "Anchored to another model: " + ((c.Model ?? "") != "" ? c.Model : string.Join(", ", ms)) + " \u2014 the view may be empty or wrong here.";
+    }
+    else if (lr == null) lblWhy3.Text = "";
     else if (lr.Empty) { lblWhy3.ForeColor = SD.Color.Firebrick; lblWhy3.Text = "Nothing from this model at this location"; }
     else { lblWhy3.ForeColor = SD.Color.Gray; lblWhy3.Text = lr.Summary; }
     string hint = lr == null ? "" : lr.Hint;
     lblHint.Text = hint; lblHint.Visible = hint != "";
     bool gt = lr != null && lr.OffsetM != null && lr.OffsetM.Value > H.OffsetLimit;
     btnGoto.Visible = gt;
-    btnDup.Width = gt ? 232 : 356;
+    btnDup.Width = (gt || isClash) ? 232 : 356;   // #80: clash layout shares the row with btnColor
   }
 
   public void ShowSelection(int found, int total) {
