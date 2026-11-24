@@ -140,8 +140,8 @@ public class NavForm : WF.Form {
     var lblSize = new WF.Label { Left = 170, Top = y + 3, Width = 110, Height = 20, Text = "Box size (m):" };
     num = new WF.NumericUpDown { Left = 280, Top = y - 1, Width = 88, DecimalPlaces = 1, Increment = 0.5m, Minimum = 0.5m, Maximum = 50m, Value = (decimal)Math.Min(50.0, Math.Max(0.5, H.BoxM)) };
     y += 32;
-    bool noIso = isVp || isClash || isRevizto;   // #69: Revizto too; clashes are always isolated: no button
-    btnIso = new WF.Button { Left = 12, Top = y, Width = 176, Height = 34, Text = "Isolate in 3D view", Visible = !noIso, Enabled = false };
+    bool noIso = isVp || isRevizto;   // #69: Revizto too; #82: clash has the button again (Isolate / Unisolate)
+    btnIso = new WF.Button { Left = 12, Top = y, Width = 176, Height = 34, Text = isClash ? "Unisolate" : "Isolate in 3D view", Visible = !noIso, Enabled = false };   // #82: same row as Save solved snapshot, split width
     btnSnap = new WF.Button { Left = noIso ? 12 : 192, Top = y, Width = noIso ? 356 : 176, Height = 34, Text = "Save solved snapshot", Font = new SD.Font("Segoe UI Semibold", 9.5f) };
     y += 40;
     btnDup = new WF.Button { Left = 12, Top = y, Width = isClash ? 232 : 356, Height = 32, Text = "Duplicate 3D view" };
@@ -186,7 +186,7 @@ public class NavForm : WF.Form {
     if (isClash) tip.SetToolTip(cmbSub, "Clash status = the Navisworks status from the clash report (New / Active / Reviewed / Approved / Resolved). The coloured Status below is your report status.");
     if (isRevizto) tip.SetToolTip(cmbSub, "Revizto status = the status in the Revizto Excel (Open / In progress / Solved / Closed). Stamp = stamp abbreviation; several with ; (AMP; SEC = either). The coloured Status below is your report status.");
     tip.SetToolTip(cmbStamp, "Stamp abbreviation. Several separated by ; show any of them (AMP; SEC).");
-    tip.SetToolTip(btnIso, "Temporarily isolate the found elements in the VP view. Click again to restore the original clash view.");
+    tip.SetToolTip(btnIso, isClash ? "Clash: Unisolate shows the whole model inside the section box (colours kept). Isolate shows only the clashing elements again." : "Temporarily isolate the found elements in the VP view. Click again to restore the original clash view.");
     tip.SetToolTip(btnPick[0], "Select by ID: select this element in Revit (found by its Element ID)");
     tip.SetToolTip(btnPick[1], "Select by ID: select this element in Revit (found by its Element ID)");
     tip.SetToolTip(btnDup, "Orthographic copy of this view (WIP-Clash Viewer-VP-...): same direction and section box, all annotations off. Fix the issue there; the VP view stays for the snapshot.");
@@ -366,7 +366,9 @@ public class NavForm : WF.Form {
       if (i >= c.Items.Count) { lblItem[i].Text = i == 0 ? "No Element ID in the report for this clash" : ""; lblItem[i].ForeColor = SD.Color.Gray; btnPick[i].Enabled = false; continue; }
       var it = c.Items[i];
       var h = cur && i < H.Hits.Count && H.Hits[i].Id == it.Value ? H.Hits[i] : null;
-      lblItem[i].Text = (i + 1) + ". " + it.Key + "  #" + it.Value + (h != null ? "  -  " + h.Where : "");
+      // #81: Found = current text + category; not found = red "<model> #id: NOT FOUND (<Where>)"
+      if (h != null && !h.Found) lblItem[i].Text = (i + 1) + ". " + it.Key + " #" + it.Value + ": NOT FOUND (" + h.Where + ")";
+      else lblItem[i].Text = (i + 1) + ". " + it.Key + "  #" + it.Value + (h != null ? "  -  " + h.Where + (h.CatName != "" ? " \u00B7 " + h.CatName : "") : "");
       lblItem[i].ForeColor = h == null ? SD.Color.DimGray : h.Found ? SD.Color.SeaGreen : SD.Color.Firebrick;
       btnPick[i].Enabled = h != null && h.Found;
     }
@@ -617,9 +619,15 @@ public class NavForm : WF.Form {
       ShowHits();
       ShowWhy(c);   // #70 / #71
       SyncColors();   // #80
+      if (isClash) {   // #82: Unisolate when isolated, Isolate when not
+        btnIso.Text = H.Isolated ? "Unisolate" : "Isolate";
+        btnIso.BackColor = H.Isolated ? SD.Color.FromArgb(255, 236, 179) : SD.Color.Empty; btnIso.UseVisualStyleBackColor = !H.Isolated;
+        btnIso.Enabled = H.Cur > 0;   // a clash has been opened at least once
+      } else {
       btnIso.Text = H.Isolated ? "Restore original view" : "Isolate in 3D view";
       btnIso.BackColor = H.Isolated ? SD.Color.FromArgb(255, 236, 179) : SD.Color.Empty; btnIso.UseVisualStyleBackColor = !H.Isolated;
       btnIso.Enabled = H.Isolated || (H.Cur == n && H.Hits.Any(x => x.Found));
+      }
       ShowPicture();
     } finally { syncing = false; }
   }
@@ -666,7 +674,13 @@ public class NavForm : WF.Form {
     btnDup.Width = (gt || isClash) ? 232 : 356;   // #80: clash layout shares the row with btnColor
   }
 
-  public void ShowSelection(int found, int total) {
+  public void ShowSelection(int found, int total, bool clash, string linkNote) {
+    if (clash && total > 0 && found == 0) {   // #81: never silently show the box
+      lblInfo.ForeColor = SD.Color.Firebrick;
+      lblInfo.Text = "Clash elements not found in this model or its links: the view shows everything in the box.";
+      return;
+    }
+    if (!string.IsNullOrEmpty(linkNote)) lblInfo.Text = linkNote + ". " + lblInfo.Text;   // #81
     lblInfo.Text = (found > 0 ? "Found " + found + " of " + total + " element(s) by Element ID. " : "Element(s) not found in this model or its links. ") + lblInfo.Text;
   }
 

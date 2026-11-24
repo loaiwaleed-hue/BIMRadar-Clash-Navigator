@@ -124,6 +124,7 @@ public static class NavigatorEntry {
     h.HtmlPath = htmlPath;
     h.HtmlError = htmlErr;
     h.Source = sourceName;
+    h.Isolated = sourceName.StartsWith("Navisworks clash");   // #82: clash opens isolated; the Isolate / Unisolate button toggles it
     h.BoxM = 3.0;
     var ev = Autodesk.Revit.UI.ExternalEvent.Create(h);
     var f2 = new NavForm(h, ev, defaultModel);

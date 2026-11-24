@@ -42,6 +42,7 @@ public class NavHandler : IExternalEventHandler {
   public class Hit {
     public string Model = ""; public int Id; public string Where = "";
     public ElementId Eid; public RevitLinkInstance Link;
+    public string CatName = "";   // #81: category of the found element (parent category for a subcategory)
     public bool Found { get { return Eid != null; } }
   }
 
@@ -66,6 +67,7 @@ public class NavHandler : IExternalEventHandler {
         }
         if (!h.Found) h.Where = links.Any(l => ReviztoData.ModelMatches(it.Key, l.GetLinkDocument().Title)) ? "not found in the link" : "model not open / not linked";
       }
+      if (h.Found) { var hc = CatOf(doc, h); if (hc != null) h.CatName = hc.Name; }   // #81
       res.Add(h);
     }
     return res;
@@ -106,39 +108,58 @@ public class NavHandler : IExternalEventHandler {
   // Linked elements cannot be isolated one by one in Revit: the link instance is isolated, and every model category
   // other than the clash elements' categories is hidden in the view (linked models shown "By host view" follow it).
   // keep == null shows every model category again.
-  static void ApplyCategories(Document doc, View v, HashSet<string> keep) {
-    string links = new ElementId(BuiltInCategory.OST_RvtLinks).ToString(), box = new ElementId(BuiltInCategory.OST_SectionBox).ToString();
+  // #81: categories are matched by BuiltInCategory (the integer id of a built-in category is the same in the link and the host
+  // document), falling back to the category name (project-defined categories have different ids per document).
+  static void ApplyCategories(Document doc, View v, HashSet<long> keepIds, HashSet<string> keepNames) {
+    long links = (long)(int)BuiltInCategory.OST_RvtLinks, box = (long)(int)BuiltInCategory.OST_SectionBox;
+    bool all = keepIds == null;
     foreach (Category cat in doc.Settings.Categories) {
       try {
         if (cat.CategoryType != CategoryType.Model) continue;
-        string id = cat.Id.ToString();
-        bool hide = keep != null && id != links && id != box && !keep.Contains(id);
+        long id = Compat.IdValue(cat.Id);
+        bool keepIt = all || id == links || id == box || keepIds.Contains(id) || (keepNames != null && keepNames.Contains(cat.Name));
+        bool hide = !keepIt;
         if (!v.CanCategoryBeHidden(cat.Id) || v.GetCategoryHidden(cat.Id) == hide) continue;
         v.SetCategoryHidden(cat.Id, hide);
       } catch (Exception) { }
     }
   }
 
-  static string CatOf(Document doc, Hit h) {
+  // top-level category of the hit's element (in its own document: the link document for a linked hit)
+  static Category CatOf(Document doc, Hit h) {
     var d = h.Link != null ? h.Link.GetLinkDocument() : doc;
     var e = d == null ? null : d.GetElement(h.Eid);
     var c = e == null ? null : e.Category;
     if (c != null && c.Parent != null) c = c.Parent;
-    return c == null ? null : c.Id.ToString();
+    return c;
   }
 
-  // isolate the found elements of the item in view v (clash: always). Host elements by temporary isolate; linked ones as above.
+  public string LinkNote = "";   // #81: what the link display step did in the last ApplyIsolation (shown in the window)
+
+  // isolate the found elements of the item in view v when on (#82: clash too, Isolate button). Host elements by temporary isolate; linked ones as above.
+  // on == false: only the temporary isolate is switched off (and categories shown again); section box and colours are not touched here.
   void ApplyIsolation(Document doc, View3D v, List<Hit> hits, bool on) {
     if (v.IsInTemporaryViewMode(TemporaryViewMode.TemporaryHideIsolate)) v.DisableTemporaryViewMode(TemporaryViewMode.TemporaryHideIsolate);
     var found = hits.Where(x => x.Found).ToList();
+    // #81: every linked hit's link instance follows the host view (a per-link display setting would hide the clash categories / ignore the green override). Before colours.
+    var notes = new List<string>();
+    foreach (var li in found.Where(x => x.Link != null).Select(x => x.Link).GroupBy(x => x.Id.ToString()).Select(g => g.First())) {
+      var n = Compat.LinkToHostView(v, li.Id);
+      if (n != null) notes.Add(li.GetLinkDocument().Title + ": " + n);
+    }
+    LinkNote = string.Join("; ", notes);
     var iso = found.Select(x => x.Link == null ? x.Eid : x.Link.Id).Distinct().ToList();
     if (on && iso.Count > 0) v.IsolateElementsTemporary(iso);
-    HashSet<string> keep = null;
+    HashSet<long> keepIds = null; HashSet<string> keepNames = null;
     if (on && found.Any(x => x.Link != null)) {
-      keep = new HashSet<string>(found.Select(x => CatOf(doc, x)).Where(x => x != null));
-      if (keep.Count == 0) keep = null;
+      keepIds = new HashSet<long>(); keepNames = new HashSet<string>();
+      foreach (var x in found) {
+        var cat = CatOf(doc, x);
+        if (cat == null) { keepIds = null; keepNames = null; break; }   // a category we cannot read: hide nothing rather than hide the element
+        keepIds.Add(Compat.IdValue(cat.Id)); keepNames.Add(cat.Name);   // BuiltInCategory id first (equal in link and host), name as fallback
+      }
     }
-    ApplyCategories(doc, v, keep);
+    ApplyCategories(doc, v, keepIds, keepNames);
   }
 
   // #68 / #77: VP / work views open shaded at Fine detail (skipped when a view template controls them; a refusal never breaks navigation)
@@ -191,6 +212,7 @@ public class NavHandler : IExternalEventHandler {
     colored.Remove(v.Id);
   }
 
+  // #81: surface + cut foreground = solid pattern in col, projection + cut lines in col. For a link instance the override only applies while the link is By host view (see ApplyIsolation).
   static bool Paint(View v, ElementId id, ElementId solid, Color col) {
     try {
       var o = new OverrideGraphicSettings();
@@ -251,8 +273,8 @@ public class NavHandler : IExternalEventHandler {
         var bb = new BoundingBoxXYZ(); bb.Min = new XYZ(p.X - h, p.Y - h, p.Z - h); bb.Max = new XYZ(p.X + h, p.Y + h, p.Z + h);
         nv.SetSectionBox(bb); nv.IsSectionBoxActive = true;
       }
-      ApplyIsolation(doc, nv, Hits, (Isolated && !Source.StartsWith("Revizto")) || c.IsClash);   // #69
-      Colorize(doc, nv, c.IsClash, Hits);   // #80
+      ApplyIsolation(doc, nv, Hits, Isolated && !Source.StartsWith("Revizto"));   // #69 / #82: clash too, H.Isolated (default true for clash)
+      Colorize(doc, nv, c.IsClash, Hits);   // #80 / #81: after ApplyIsolation (link display + categories)
       tx.Commit();
     }
     uidoc.ActiveView = nv;
@@ -497,11 +519,12 @@ public class NavHandler : IExternalEventHandler {
         return;
       }
       if (a == "Isolate" && Source.StartsWith("Revizto")) { Isolated = false; a = "Refresh"; }   // #69: no isolation for Revizto issues
+      // #82: clash: toggles Isolated (default true); Refresh re-runs the view: unisolated = temporary isolate off, section box and colours kept
       else if (a == "Isolate") { Isolated = !Isolated; a = "Refresh"; }
       if (a == "Duplicate") {
         if (tv == null || cur < 1 || cur > count) { if (Form != null && !Form.IsDisposed) Form.ShowError("Open a VP view first (click Next or Previous), then duplicate it."); return; }
         string made = DuplicateOrtho(uidoc, tv, Cams[cur - 1]);
-        if (Form != null && !Form.IsDisposed) Form.ShowMessage("Created \"" + made + "\": orthographic, no crop, annotations off (section box kept), same section box" + (Cams[cur - 1].IsClash ? ", clashing elements isolated" : "") + ". Next / Previous go back to the VP view.");
+        if (Form != null && !Form.IsDisposed) Form.ShowMessage("Created \"" + made + "\": orthographic, no crop, annotations off (section box kept), same section box" + (Cams[cur - 1].IsClash && Isolated ? ", clashing elements isolated" : "") + ". Next / Previous go back to the VP view.");
         return;
       }
 
@@ -580,9 +603,9 @@ public class NavHandler : IExternalEventHandler {
         } else {
           tv.IsSectionBoxActive = false;
         }
-        // clash: always only the clashing elements; Revizto: when "Isolate in 3D view" is on
-        ApplyIsolation(doc, tv, hits, (Isolated && !Source.StartsWith("Revizto")) || c.IsClash);   // #69
-        Colorize(doc, tv, c.IsClash, hits);   // #80: after isolation + section box; failures are swallowed
+        // #82: clash and VP: only the found elements when Isolated (clash: on at load, Isolate / Unisolate button); never for Revizto
+        ApplyIsolation(doc, tv, hits, Isolated && !Source.StartsWith("Revizto"));   // #69 / #82: clash too, H.Isolated (default true for clash)
+        Colorize(doc, tv, c.IsClash, hits);   // #80 / #81: after ApplyIsolation / ApplyCategories; after isolation + section box; failures are swallowed
         tx.Commit();
       }
 
@@ -599,7 +622,7 @@ public class NavHandler : IExternalEventHandler {
       if (sel.Count > 0) { try { uidoc.Selection.SetElementIds(sel); } catch (Exception) { } }
       Cur = target;
       if (!c.IsClash && Source.StartsWith("Revizto") && a != "GotoElement") ComputeLoc(doc, c, hits);   // #72 / #73: read-only, after the commit
-      if (Form != null && !Form.IsDisposed) { Form.RefreshLoc(target); if (hits.Count > 0) Form.ShowSelection(hits.Count(x => x.Found), hits.Count); Form.ShowTime(sw.ElapsedMilliseconds); }
+      if (Form != null && !Form.IsDisposed) { Form.RefreshLoc(target); if (hits.Count > 0) Form.ShowSelection(hits.Count(x => x.Found), hits.Count, c.IsClash, LinkNote); /* #81 */ Form.ShowTime(sw.ElapsedMilliseconds); }
     } catch (Exception ex) {
       if (Form != null && !Form.IsDisposed) Form.ShowError(ex.Message);
     }
