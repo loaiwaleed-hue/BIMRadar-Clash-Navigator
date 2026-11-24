@@ -141,11 +141,18 @@ public class NavForm : WF.Form {
     num = new WF.NumericUpDown { Left = 280, Top = y - 1, Width = 88, DecimalPlaces = 1, Increment = 0.5m, Minimum = 0.5m, Maximum = 50m, Value = (decimal)Math.Min(50.0, Math.Max(0.5, H.BoxM)) };
     y += 32;
     bool noIso = isVp || isRevizto;   // #69: Revizto too; #82: clash has the button again (Isolate / Unisolate)
-    btnIso = new WF.Button { Left = 12, Top = y, Width = 176, Height = 34, Text = isClash ? "Unisolate" : "Isolate in 3D view", Visible = !noIso, Enabled = false };   // #82: same row as Save solved snapshot, split width
-    btnSnap = new WF.Button { Left = noIso ? 12 : 192, Top = y, Width = noIso ? 356 : 176, Height = 34, Text = "Save solved snapshot", Font = new SD.Font("Segoe UI Semibold", 9.5f) };
-    y += 40;
-    btnDup = new WF.Button { Left = 12, Top = y, Width = isClash ? 232 : 356, Height = 32, Text = "Duplicate 3D view" };
-    btnColor = new WF.Button { Left = 248, Top = y, Width = 120, Height = 32, Text = "Clear override", Visible = isClash };   // #80: right of Duplicate 3D view, same row
+    // #85: clash: row A = [Unisolate | Clear override], row B = [Duplicate 3D view | Save snapshot]; Revizto / VP keep the old layout
+    btnIso = new WF.Button { Left = 12, Top = y, Width = 176, Height = 34, Text = isClash ? "Unisolate" : "Isolate in 3D view", Visible = !noIso, Enabled = false };   // #82
+    btnColor = new WF.Button { Left = 192, Top = y, Width = 176, Height = 34, Text = "Clear override", Visible = isClash };   // #80 / #85: clash only, right of Unisolate
+    if (isClash) {
+      y += 40;
+      btnDup = new WF.Button { Left = 12, Top = y, Width = 176, Height = 34, Text = "Duplicate 3D view" };
+      btnSnap = new WF.Button { Left = 192, Top = y, Width = 176, Height = 34, Text = "Save snapshot", Font = new SD.Font("Segoe UI Semibold", 9.5f) };
+    } else {
+      btnSnap = new WF.Button { Left = noIso ? 12 : 192, Top = y, Width = noIso ? 356 : 176, Height = 34, Text = "Save snapshot", Font = new SD.Font("Segoe UI Semibold", 9.5f) };
+      y += 40;
+      btnDup = new WF.Button { Left = 12, Top = y, Width = 356, Height = 32, Text = "Duplicate 3D view" };
+    }
     btnGoto = new WF.Button { Left = 248, Top = y, Width = 120, Height = 32, Text = "Go to element", Visible = false };   // #73: shown only when an element is far from the point
     y += 38;
     var lblAct = new WF.Label { Left = 12, Top = y, Width = 84, Height = 16, ForeColor = SD.Color.DimGray, Font = new SD.Font("Segoe UI", 8.5f), Text = "Action status" };
@@ -671,7 +678,7 @@ public class NavForm : WF.Form {
     lblHint.Text = hint; lblHint.Visible = hint != "";
     bool gt = lr != null && lr.OffsetM != null && lr.OffsetM.Value > H.OffsetLimit;
     btnGoto.Visible = gt;
-    btnDup.Width = (gt || isClash) ? 232 : 356;   // #80: clash layout shares the row with btnColor
+    if (!isClash) btnDup.Width = gt ? 232 : 356;   // #80 / #85: the clash layout is fixed (half width)
   }
 
   public void ShowSelection(int found, int total, bool clash, string linkNote) {

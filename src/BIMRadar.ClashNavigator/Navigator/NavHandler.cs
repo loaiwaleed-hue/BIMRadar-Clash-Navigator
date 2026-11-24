@@ -386,6 +386,57 @@ public class NavHandler : IExternalEventHandler {
     } catch (Exception) { }
   }
 
+  // #85: perspective camera fit for a clash. Last UIView rectangle (screen px) of a clash navigation: used for the overlap when no UIView is open yet.
+  bool lastRectOk; int lastVL, lastVT, lastVR, lastVB;
+  const double PerspHalfFov = 25.0 * Math.PI / 180.0;   // Revit's default perspective is about 50 degrees
+
+  // #85: new eye so the host item fills the view: target = clash point (else box centre), keep the current direction (c.Fwd / c.Up from ClashSetup),
+  // d = max(1.5 m, r / tan(25 deg) * 1.1), eye = target - dir * d; then target and eye shift sideways by w * f / 2 (w = 2 d tan 25 deg)
+  // toward the side the form covers, so the clash shows in the free part. SetOrientation / View3D.IsPerspective / UIView.GetWindowRectangle exist in Revit 2022-2027.
+  void FitPerspective(Document doc, UIDocument uidoc, View3D v, VpCam c, List<Hit> hits, BoundingBoxXYZ clashBox) {
+    try {
+      var hostHit = hits.FirstOrDefault(x => x.Found && x.Link == null && HitBox(doc, x) != null);
+      BoundingBoxXYZ bb = hostHit != null ? HitBox(doc, hostHit) : HitsBox(doc, hits);
+      if (bb == null) bb = clashBox;
+      if (bb == null) return;
+      XYZ center = (bb.Min + bb.Max) * 0.5;
+      double r = (bb.Max - bb.Min).GetLength() / 2.0;
+      XYZ target = c.HasPoint && c.Point != null ? c.Point : center;
+      XYZ dir = c.Fwd.Normalize();
+      XYZ up = c.Up - dir * c.Up.DotProduct(dir);   // perpendicular to dir, as ClashSetup does
+      if (up.GetLength() < 1e-6) return;
+      up = up.Normalize();
+      double d = Math.Max(1.5 / FT, r / Math.Tan(PerspHalfFov) * 1.1);
+      XYZ right = dir.CrossProduct(up).Normalize();
+      int vl = 0, vt = 0, vr = 0, vb = 0; bool have = false;
+      try {
+        var uiv = uidoc.GetOpenUIViews().FirstOrDefault(u => u.ViewId == v.Id);
+        if (uiv != null) { var wr = uiv.GetWindowRectangle(); vl = wr.Left; vt = wr.Top; vr = wr.Right; vb = wr.Bottom; have = true; }
+      } catch (Exception) { }
+      if (!have && lastRectOk) { vl = lastVL; vt = lastVT; vr = lastVR; vb = lastVB; have = true; }
+      if (have) {
+        bool left; double f = FormCover(vl, vt, vr, vb, out left);
+        if (f > 0.01) {
+          double w = 2.0 * d * Math.Tan(PerspHalfFov);
+          double s = w * f / 2.0;
+          target = target + right * (left ? -s : s);   // camera moves toward the covered side: the clash appears in the free part
+        }
+      }
+      XYZ eye = target - dir * d;
+      v.SetOrientation(new ViewOrientation3D(eye, up, dir));
+    } catch (Exception) { }
+  }
+
+  // #85: remember the VP view's rectangle for the next navigation
+  void RememberRect(UIDocument uidoc, View3D v) {
+    try {
+      var uiv = uidoc.GetOpenUIViews().FirstOrDefault(u => u.ViewId == v.Id);
+      if (uiv == null) return;
+      var wr = uiv.GetWindowRectangle();
+      lastVL = wr.Left; lastVT = wr.Top; lastVR = wr.Right; lastVB = wr.Bottom; lastRectOk = true;
+    } catch (Exception) { }
+  }
+
   // width / height of the picture (falls back to the camera aspect)
   double FrameAspect(VpCam c) {
     try {
@@ -705,6 +756,7 @@ public class NavHandler : IExternalEventHandler {
         } else {
           tv.IsSectionBoxActive = false;
         }
+        if (c.IsClash && gotoBox == null && tv.IsPerspective) FitPerspective(doc, uidoc, tv, c, hits, clashBox);   // #85: after the section box is set
         // #82: clash and VP: only the found elements when Isolated (clash: on at load, Isolate / Unisolate button); never for Revizto
         ApplyIsolation(doc, tv, hits, Isolated && !Source.StartsWith("Revizto"));   // #69 / #82: clash too, H.Isolated (default true for clash)
         Colorize(doc, tv, c.IsClash, hits);   // #80 / #81: after ApplyIsolation / ApplyCategories; after isolation + section box; failures are swallowed
@@ -712,8 +764,12 @@ public class NavHandler : IExternalEventHandler {
       }
 
       if (uidoc.ActiveView == null || uidoc.ActiveView.Id != tv.Id) uidoc.ActiveView = tv;
-      try { var uiv = uidoc.GetOpenUIViews().FirstOrDefault(u => u.ViewId == tv.Id); if (uiv != null) uiv.ZoomToFit(); } catch (Exception) { }
-      if (c.IsClash && uidoc.ActiveView != null && uidoc.ActiveView.Id == tv.Id) ZoomToHits(doc, uidoc, tv, hits);   // #84: after the transaction, view active
+      try { var uiv = uidoc.GetOpenUIViews().FirstOrDefault(u => u.ViewId == tv.Id); if (uiv != null && !(c.IsClash && tv.IsPerspective)) uiv.ZoomToFit(); } catch (Exception) { }   // #85: not for the perspective clash view (it would undo the fit)
+      if (c.IsClash && uidoc.ActiveView != null && uidoc.ActiveView.Id == tv.Id) {
+        if (tv.IsPerspective) RememberRect(uidoc, tv);   // #85: perspective is fitted in the transaction (FitPerspective); ZoomAndCenterRectangle only for orthographic
+        else ZoomToHits(doc, uidoc, tv, hits);
+      }
+      // #84: after the transaction, view active
       // close the tabs of earlier work views (they stay in the project): every extra open 3D view with links makes Revit slower
       try {
         foreach (var u in uidoc.GetOpenUIViews()) {
