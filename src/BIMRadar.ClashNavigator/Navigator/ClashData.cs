@@ -27,7 +27,7 @@ public static class ClashData {
   static string Text(string html) { return RxWs.Replace(System.Net.WebUtility.HtmlDecode(RxTag.Replace(html ?? "", " ")), " ").Trim(); }
 
   public static bool IsClashReport(string html) {
-    try { using (var r = new System.IO.StreamReader(html)) { var b = new char[20000]; int n = r.Read(b, 0, b.Length); var s = new string(b, 0, n); return s.Contains("Clash Report") || s.Contains("testSummaryTable"); } }
+    try { using (var r = new System.IO.StreamReader(html)) { var b = new char[20000]; int n = r.Read(b, 0, b.Length); var s = new string(b, 0, n); return s.Contains("Clash Report") || s.Contains("testSummaryTable") || s.Contains("class=\"mainTable\""); }   // #91 }
     catch (Exception) { return false; }
   }
 
@@ -89,6 +89,9 @@ public static class ClashData {
     var starts = new List<int>();
     int at = 0;
     while ((at = s.IndexOf("class=\"testSummaryTable\"", at, StringComparison.Ordinal)) >= 0) { starts.Add(at); at += 10; }
+    // #91: report written without "Summary" has no testSummaryTable: read each mainTable as its own test
+    bool noSummary = starts.Count == 0;
+    if (noSummary) { at = 0; while ((at = s.IndexOf("class=\"mainTable\"", at, StringComparison.Ordinal)) >= 0) { starts.Add(at); at += 10; } }
     bool picDirSet = false;
     int idx = 0;
     for (int t = 0; t < starts.Count; t++) {
@@ -97,9 +100,9 @@ public static class ClashData {
       int sumEnd = part.IndexOf("</table>", StringComparison.Ordinal);
       string summary = sumEnd > 0 ? part.Substring(0, sumEnd) : "";
       var sumRows = Regex.Matches(summary, "<tr[^>]*>(.*?)</tr>", RegexOptions.Singleline).Cast<Match>().Select(m => RxCell.Matches(m.Groups[1].Value).Cast<Match>().Select(c => Text(c.Groups[1].Value)).ToList()).ToList();
-      string test = sumRows.Count > 0 && sumRows[0].Count > 0 ? sumRows[0][0] : "Test " + (t + 1);
+      string test = !noSummary && sumRows.Count > 0 && sumRows[0].Count > 0 ? sumRows[0][0] : "Test " + (t + 1);   // #91
       int newActive = 0;
-      if (sumRows.Count > 1) {
+      if (!noSummary && sumRows.Count > 1) {   // #91
         var hdr = sumRows[0]; var val = sumRows[1];
         for (int k = 1; k < hdr.Count; k++) {
           if (hdr[k] == "New" || hdr[k] == "Active") { int n; if (k - 1 < val.Count && int.TryParse(val[k - 1], out n)) newActive += n; }
