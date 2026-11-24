@@ -27,7 +27,7 @@ public static class ClashData {
   static string Text(string html) { return RxWs.Replace(System.Net.WebUtility.HtmlDecode(RxTag.Replace(html ?? "", " ")), " ").Trim(); }
 
   public static bool IsClashReport(string html) {
-    try { using (var r = new System.IO.StreamReader(html)) { var b = new char[20000]; int n = r.Read(b, 0, b.Length); var s = new string(b, 0, n); return s.Contains("Clash Report") || s.Contains("testSummaryTable") || s.Contains("class=\"mainTable\""); }   // #91 }
+    try { using (var r = new System.IO.StreamReader(html)) { var b = new char[20000]; int n = r.Read(b, 0, b.Length); var s = new string(b, 0, n); return s.Contains("Clash Report") || s.Contains("testSummaryTable") || s.Contains("class=\"mainTable\""); } }   // #91
     catch (Exception) { return false; }
   }
 
