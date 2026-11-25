@@ -893,7 +893,7 @@ public class NavHandler : IExternalEventHandler {
     }
   }
 
-  // Exports exactly the VP view's crop frame (= the source picture's frame) and saves it at that picture's shape.
+  // #97: exports the VP view at high resolution, auto-crops to the visible content (+12% margin) and saves it at the source picture's shape.
   string SaveSnapshot(Document doc, View3D v, VpCam c) {
     if (string.IsNullOrWhiteSpace(PicDir)) throw new Exception("No picture folder is set.");
     System.IO.Directory.CreateDirectory(PicDir);
@@ -911,7 +911,7 @@ public class NavHandler : IExternalEventHandler {
       o.FilePath = System.IO.Path.Combine(tmp, "snap");
       o.ZoomType = ZoomFitType.FitToPage;
       o.FitDirection = FitDirectionType.Horizontal;
-      o.PixelSize = Math.Max(outW, 512);
+      o.PixelSize = 3000; // #97: high-res export, then auto-crop to the clash content
       o.ImageResolution = ImageResolution.DPI_150;
       o.HLRandWFViewsFileType = ImageFileType.JPEGLossless;
       o.ShadowViewsFileType = ImageFileType.JPEGLossless;
@@ -920,12 +920,17 @@ public class NavHandler : IExternalEventHandler {
       if (f == null) throw new Exception("Revit did not produce an image.");
       string dest = NavData.AfterPath(PicDir, c);
       string tmpOut = System.IO.Path.Combine(tmp, "out.jpg");
-      using (var src = NavData.LoadImageNoLock(f.FullName))
+      using (var srcImg = NavData.LoadImageNoLock(f.FullName))
+      using (var src = new SD.Bitmap(srcImg.Width, srcImg.Height, SD.Imaging.PixelFormat.Format32bppArgb)) // #97
       using (var bmp = new SD.Bitmap(outW, outH))
       using (var g = SD.Graphics.FromImage(bmp)) {
         g.InterpolationMode = SD.Drawing2D.InterpolationMode.HighQualityBicubic;
         g.Clear(SD.Color.White);
-        g.DrawImage(src, new SD.Rectangle(0, 0, outW, outH));
+        using (var gs = SD.Graphics.FromImage(src)) { gs.Clear(SD.Color.White); gs.DrawImage(srcImg, 0, 0, srcImg.Width, srcImg.Height); } // #97
+        var content = SnapshotCrop.ContentRect(src); // #97: auto-crop to content, keep the full image if nothing found
+        var destRect = new SD.Rectangle(0, 0, outW, outH);
+        if (!content.IsEmpty) g.DrawImage(src, destRect, SnapshotCrop.FitCrop(content, src.Size, (double)outW / outH), SD.GraphicsUnit.Pixel); // #97
+        else g.DrawImage(src, destRect);
         var enc = SD.Imaging.ImageCodecInfo.GetImageEncoders().First(e => e.FormatID == SD.Imaging.ImageFormat.Jpeg.Guid);
         var ps = new SD.Imaging.EncoderParameters(1);
         ps.Param[0] = new SD.Imaging.EncoderParameter(SD.Imaging.Encoder.Quality, 92L);
