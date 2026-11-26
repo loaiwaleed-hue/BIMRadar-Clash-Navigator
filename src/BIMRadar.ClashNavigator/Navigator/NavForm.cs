@@ -186,7 +186,7 @@ public class NavForm : WF.Form {
     if (y + picH + below > clientH) ClientSize = new SD.Size(380, y + picH + below);
 
     var tip = new WF.ToolTip();
-    if (isClash) tip.SetToolTip(btnSnap, "Solved snapshot in 2 steps: click, set up the Revit view as the solved picture should look, then click Capture view: the whole active view is saved to <picture>_after.jpg in:\n" + (H.PicDir ?? "") + "\nShortcut: Ctrl+S");
+    if (isClash) tip.SetToolTip(btnSnap, "Click, set the Revit view as the solved picture should look, then click Capture view: the whole active view is saved to <picture>_after.jpg in:\n" + (H.PicDir ?? "") + "\nShortcut: Ctrl+S");
     else tip.SetToolTip(btnSnap, "Exports the VP view's frame (same field of view as the source picture) to <picture>_after.jpg in:\n" + (H.PicDir ?? "") + "\nShortcut: Ctrl+S");
     tip.SetToolTip(btnWeb, "Open the web navigator for this project");
     tip.SetToolTip(btnOpen, H.PicDir ?? "");
@@ -242,7 +242,7 @@ public class NavForm : WF.Form {
     btnWeb.Click += (s, e) => OpenWeb();
     rbBefore.CheckedChanged += (s, e) => ShowPicture();
     rbAfter.CheckedChanged += (s, e) => ShowPicture();
-    pic.Click += (s, e) => { if (snapArmed) return; var p = CurrentPicturePath(); if (p != null && System.IO.File.Exists(p)) Start(p, null); };
+    pic.Click += (s, e) => { var p = CurrentPicturePath(); if (p != null && System.IO.File.Exists(p)) Start(p, null); };
     // any way the model changes (click, keyboard, autocomplete) re-applies the filter and jumps to that model's first item
     cmbModel.SelectedIndexChanged += (s, e) => {
       if (syncing || cmbModel.SelectedIndex < 0) return;
@@ -575,8 +575,7 @@ public class NavForm : WF.Form {
       snapArmed = true;
       btnSnap.Text = "Capture view"; btnSnap.BackColor = SD.Color.FromArgb(255, 230, 140);
       lblInfo.ForeColor = SD.Color.FromArgb(90, 60, 0);
-      lblInfo.Text = "Solved snapshot: follow the 2 steps in the picture area. Esc cancels.";
-      ShowPicture();   // #101: shows the step card instead of a picture while armed
+      lblInfo.Text = "Set the Revit view as the solved picture should look (any view), then click Capture view. Esc cancels.";
       return;
     }
     DisarmSnap();
@@ -586,33 +585,6 @@ public class NavForm : WF.Form {
     if (!snapArmed) return;
     snapArmed = false;
     btnSnap.Text = "Save snapshot"; btnSnap.BackColor = SD.SystemColors.Control; btnSnap.UseVisualStyleBackColor = true;
-    ShowPicture();
-  }
-
-  // #101: step card in the picture area, so a first-time user sees what Capture view does.
-  void ShowSnapCard() {
-    int w = Math.Max(pic.ClientSize.Width, 100), h = Math.Max(pic.ClientSize.Height, 100);
-    var bmp = new SD.Bitmap(w, h);
-    using (var g = SD.Graphics.FromImage(bmp))
-    using (var title = new SD.Font("Segoe UI Semibold", 11f))
-    using (var body = new SD.Font("Segoe UI", 9.5f))
-    using (var ink = new SD.SolidBrush(SD.Color.FromArgb(60, 40, 0))) {
-      g.Clear(SD.Color.FromArgb(255, 243, 191));
-      g.TextRenderingHint = SD.Text.TextRenderingHint.ClearTypeGridFit;
-      float x = 12, y = 10, tw = w - 24;
-      g.DrawString("Solved snapshot in 2 steps", title, ink, new SD.RectangleF(x, y, tw, 24)); y += 30;
-      string[] steps = {
-        "1.  In Revit, set up the 3D view the way the solved clash should be shown: orbit, zoom, pan. Any 3D view works, e.g. the WIP copy.",
-        "2.  Click the yellow \"Capture view\" button. Everything you see in that Revit view is saved as the solved picture.",
-        "To cancel: press Esc or go to another clash." };
-      foreach (var t in steps) {
-        var sz = g.MeasureString(t, body, (int)tw);
-        g.DrawString(t, body, ink, new SD.RectangleF(x, y, tw, sz.Height + 2));
-        y += sz.Height + 8;
-      }
-    }
-    pic.Image = bmp;
-    lblPic.Text = "Waiting for Capture view...";
   }
 
   void Go(string action, int idx) {
@@ -640,7 +612,6 @@ public class NavForm : WF.Form {
 
   public void ShowPicture() {
     var old = pic.Image; pic.Image = null; if (old != null) old.Dispose();
-    if (snapArmed) { ShowSnapCard(); return; }   // #101
     var p = CurrentPicturePath();
     if (p == null) return;
     var img = NavData.LoadImageNoLock(p);
