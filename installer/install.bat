@@ -19,6 +19,7 @@ for %%Y in (2022 2023 2024 2025 2026 2027) do (
       copy /Y "%SRC%BIMRadar.ClashNavigator.addin" "%ADDINS%\%%Y\" >nul
       copy /Y "%SRC%!TFM!\BIMRadar.ClashNavigator.dll" "%ADDINS%\%%Y\BIMRadar.ClashNavigator\" >nul
       if exist "%SRC%!TFM!\BIMRadar.ClashNavigator.pdb" copy /Y "%SRC%!TFM!\BIMRadar.ClashNavigator.pdb" "%ADDINS%\%%Y\BIMRadar.ClashNavigator\" >nul
+      powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-ChildItem -LiteralPath '%ADDINS%\%%Y\BIMRadar.ClashNavigator' -Recurse | Unblock-File; Unblock-File -LiteralPath '%ADDINS%\%%Y\BIMRadar.ClashNavigator.addin'" >nul 2>&1
       echo Installed for Revit %%Y ^(!TFM!^)
       set /a COUNT+=1
       set "LIST=!LIST! %%Y"

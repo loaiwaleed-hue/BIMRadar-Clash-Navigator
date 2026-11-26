@@ -18,6 +18,11 @@ public class NavForm : WF.Form {
   readonly NavHandler H;
   readonly ExternalEvent Ev;
   WF.Label lblName, lblCount, lblInfo, lblPic;
+  WF.Label lblWhy1, lblWhy2;   // #70 / #71: anchor + search-match lines under the snapshot
+  WF.Label lblWhy3, lblHint;   // #72 / #73: what is at the location (red when empty / grey summary) + yellow hint
+  WF.CheckBox chkHide;         // #72: Hide empty (Revizto)
+  WF.Button btnCheck, btnGoto; // #72: Check locations; #73: Go to element
+  int keepN = 0;               // item that stays in the list while Hide empty is on (the one just opened)
   WF.Button btnPrev, btnNext, btnSnap, btnOpen, btnWeb;
   WF.PictureBox pic;
   WF.RadioButton rbBefore, rbAfter;
@@ -33,7 +38,8 @@ public class NavForm : WF.Form {
   string appliedKey = null;                    // model filter that H.Order currently reflects
   string sourceWord;
 
-  WF.Button btnIso, btnDup;
+  WF.Button btnChange;   // #92
+  WF.Button btnIso, btnDup, btnColor;   // #80: btnColor = Clear / Create override (clash source only)
   WF.ComboBox cmbSt;
   static readonly string[] StKeys = { "open", "closed", "clarify", "others" };
   WF.Label lblDone;
@@ -67,20 +73,21 @@ public class NavForm : WF.Form {
     srcStatus = isClash || isRevizto;
     bool isVp = H.Source.StartsWith("Navisworks viewpoints");
     sourceWord = H.Source.StartsWith("Revizto") ? "issues" : isClash ? "clashes" : "viewpoints";
-    Text = "Viewpoint Navigator - " + H.Source;
+    Text = "BIMRadar Clash Viewer - " + H.Source;
     FormBorderStyle = WF.FormBorderStyle.FixedSingle;
     MinimizeBox = true; MaximizeBox = false;
     ShowInTaskbar = true; // so a minimized window can be restored from the taskbar
     StartPosition = WF.FormStartPosition.Manual;
     var wa = WF.Screen.PrimaryScreen.WorkingArea;
-    int clientH = Math.Min(isClash ? 1048 : 968, wa.Height - 50);
+    int clientH = Math.Min(isClash ? 1082 : isRevizto ? 1080 : 1002, wa.Height - 50);
     ClientSize = new SD.Size(380, clientH);
     Location = new SD.Point(wa.Right - Width - 24, Math.Max(wa.Top, Math.Min(wa.Top + 30, wa.Bottom - Height)));
     Font = new SD.Font("Segoe UI", 9.5f);
     KeyPreview = true;
     var blue = SD.Color.FromArgb(0, 120, 212);
 
-    lblName = new WF.Label { Left = 12, Top = 10, Width = 356, Height = 26, Font = new SD.Font("Segoe UI Semibold", 12f), AutoEllipsis = true, Text = "Loading..." };
+    lblName = new WF.Label { Left = 12, Top = 10, Width = 282, Height = 26, Font = new SD.Font("Segoe UI Semibold", 12f), AutoEllipsis = true, Text = "Loading..." };
+    btnChange = new WF.Button { Left = 298, Top = 10, Width = 70, Height = 26, Text = "\u25C2 Back", Font = new SD.Font("Segoe UI", 8.5f) };   // #92: top right, same row as the title (title narrowed to 252 px), Previous / Next stay below
     lblCount = new WF.Label { Left = 12, Top = 38, Width = 356, Height = 20, ForeColor = SD.Color.DimGray, AutoEllipsis = true, Text = "" };
     lblInfo = new WF.Label { Left = 12, Top = 60, Width = 356, Height = 34, ForeColor = SD.Color.DimGray, Text = "" };
     btnPrev = new WF.Button { Left = 12, Top = 102, Width = 176, Height = 46, Text = "<  Previous", Font = new SD.Font("Segoe UI Semibold", 11f) };
@@ -118,6 +125,10 @@ public class NavForm : WF.Form {
       cmbSubSt.Items.AddRange(new object[] { "Open", "Closed", "Need clarification", "Action by others" });
     }
     y += 34;
+    // #72: Hide empty + Check locations (Revizto only)
+    chkHide = new WF.CheckBox { Left = 12, Top = y, Width = 108, Height = 24, Text = "Hide empty", Visible = isRevizto };
+    btnCheck = new WF.Button { Left = 124, Top = y - 1, Width = 244, Height = 26, Text = "Check locations", Visible = isRevizto };
+    if (isRevizto) y += 30;
     cmb = new WF.ComboBox { Left = 12, Top = y, Width = 356, DropDownStyle = WF.ComboBoxStyle.DropDownList, DropDownWidth = 520 };
     y += 36;
     for (int i = 0; i < 2; i++) {
@@ -131,11 +142,20 @@ public class NavForm : WF.Form {
     var lblSize = new WF.Label { Left = 170, Top = y + 3, Width = 110, Height = 20, Text = "Box size (m):" };
     num = new WF.NumericUpDown { Left = 280, Top = y - 1, Width = 88, DecimalPlaces = 1, Increment = 0.5m, Minimum = 0.5m, Maximum = 50m, Value = (decimal)Math.Min(50.0, Math.Max(0.5, H.BoxM)) };
     y += 32;
-    bool noIso = isVp || isClash;   // clashes are always isolated: no button
-    btnIso = new WF.Button { Left = 12, Top = y, Width = 176, Height = 34, Text = "Isolate in 3D view", Visible = !noIso, Enabled = false };
-    btnSnap = new WF.Button { Left = noIso ? 12 : 192, Top = y, Width = noIso ? 356 : 176, Height = 34, Text = "Save solved snapshot", Font = new SD.Font("Segoe UI Semibold", 9.5f) };
-    y += 40;
-    btnDup = new WF.Button { Left = 12, Top = y, Width = 356, Height = 32, Text = "Duplicate 3D view" };
+    bool noIso = !isClash;   // #93: Isolate / Unisolate button for the clash source ONLY (hidden for Revizto and viewpoints; Revizto never isolates, #69)
+    // #85: clash: row A = [Unisolate | Clear override], row B = [Duplicate 3D view | Save snapshot]; Revizto / VP keep the old layout
+    btnIso = new WF.Button { Left = 12, Top = y, Width = 176, Height = 34, Text = isClash ? "Unisolate" : "Isolate in 3D view", Visible = !noIso, Enabled = false };   // #82
+    btnColor = new WF.Button { Left = 192, Top = y, Width = 176, Height = 34, Text = "Clear override", Visible = isClash };   // #80 / #85: clash only, right of Unisolate
+    if (isClash) {
+      y += 40;
+      btnDup = new WF.Button { Left = 12, Top = y, Width = 176, Height = 34, Text = "Duplicate 3D view" };
+      btnSnap = new WF.Button { Left = 192, Top = y, Width = 176, Height = 34, Text = "Save snapshot", Font = new SD.Font("Segoe UI Semibold", 9.5f) };
+    } else {
+      btnSnap = new WF.Button { Left = noIso ? 12 : 192, Top = y, Width = noIso ? 356 : 176, Height = 34, Text = "Save snapshot", Font = new SD.Font("Segoe UI Semibold", 9.5f) };
+      y += 40;
+      btnDup = new WF.Button { Left = 12, Top = y, Width = 356, Height = 32, Text = "Duplicate 3D view" };
+    }
+    btnGoto = new WF.Button { Left = 248, Top = y, Width = 120, Height = 32, Text = "Go to element", Visible = false };   // #73: shown only when an element is far from the point
     y += 38;
     var lblAct = new WF.Label { Left = 12, Top = y, Width = 84, Height = 16, ForeColor = SD.Color.DimGray, Font = new SD.Font("Segoe UI", 8.5f), Text = "Action status" };
     y += 16;
@@ -154,10 +174,16 @@ public class NavForm : WF.Form {
     rbBefore = new WF.RadioButton { Left = 12, Top = y, Width = 150, Height = 22, Text = H.Source.StartsWith("Revizto") ? "Revizto snapshot" : isClash ? "Clash picture" : "Navisworks", Checked = true };
     rbAfter = new WF.RadioButton { Left = 166, Top = y, Width = 150, Height = 22, Text = "Solved snapshot" };
     y += 26;
-    int picH = Math.Max(140, clientH - y - 40);
+    int below = isRevizto ? 122 : 74;   // #70/#71: 34 px for the why lines; #72/#73: Revizto +48 for the location line and the hint
+    int picH = Math.Max(140, clientH - y - below);
     pic = new WF.PictureBox { Left = 12, Top = y, Width = 356, Height = picH, SizeMode = WF.PictureBoxSizeMode.Zoom, BorderStyle = WF.BorderStyle.FixedSingle, BackColor = SD.Color.FromArgb(30, 30, 30), Cursor = WF.Cursors.Hand };
     lblPic = new WF.Label { Left = 12, Top = y + picH + 4, Width = 356, Height = 32, ForeColor = SD.Color.Gray, Font = new SD.Font("Segoe UI", 8.5f), Text = "" };
-    if (y + picH + 40 > clientH) ClientSize = new SD.Size(380, y + picH + 40);
+    // #70 / #71: two small lines under the file-name line
+    lblWhy1 = new WF.Label { Left = 12, Top = y + picH + 38, Width = 356, Height = 16, Font = new SD.Font("Segoe UI", 8.5f), AutoEllipsis = true, ForeColor = SD.Color.Gray, Text = "" };
+    lblWhy2 = new WF.Label { Left = 12, Top = y + picH + 54, Width = 356, Height = 16, Font = new SD.Font("Segoe UI", 8.5f), AutoEllipsis = true, ForeColor = SD.Color.Gray, Text = "" };
+    lblWhy3 = new WF.Label { Left = 12, Top = y + picH + 70, Width = 356, Height = 16, Font = new SD.Font("Segoe UI", 8.5f), AutoEllipsis = true, ForeColor = SD.Color.Gray, Text = "" };
+    lblHint = new WF.Label { Left = 12, Top = y + picH + 88, Width = 356, Height = 32, Font = new SD.Font("Segoe UI", 8.5f), ForeColor = SD.Color.FromArgb(90, 60, 0), BackColor = SD.Color.FromArgb(255, 243, 191), Visible = false, Text = "" };
+    if (y + picH + below > clientH) ClientSize = new SD.Size(380, y + picH + below);
 
     var tip = new WF.ToolTip();
     tip.SetToolTip(btnSnap, "Exports the VP view's frame (same field of view as the source picture) to <picture>_after.jpg in:\n" + (H.PicDir ?? "") + "\nShortcut: Ctrl+S");
@@ -169,13 +195,13 @@ public class NavForm : WF.Form {
     if (isClash) tip.SetToolTip(cmbSub, "Clash status = the Navisworks status from the clash report (New / Active / Reviewed / Approved / Resolved). The coloured Status below is your report status.");
     if (isRevizto) tip.SetToolTip(cmbSub, "Revizto status = the status in the Revizto Excel (Open / In progress / Solved / Closed). Stamp = stamp abbreviation; several with ; (AMP; SEC = either). The coloured Status below is your report status.");
     tip.SetToolTip(cmbStamp, "Stamp abbreviation. Several separated by ; show any of them (AMP; SEC).");
-    tip.SetToolTip(btnIso, "Temporarily isolate the found elements in the VP view. Click again to restore the original clash view.");
+    tip.SetToolTip(btnIso, isClash ? "Clash: Unisolate shows the whole model inside the section box (colours kept). Isolate shows only the clashing elements again." : "Temporarily isolate the found elements in the VP view. Click again to restore the original clash view.");
     tip.SetToolTip(btnPick[0], "Select by ID: select this element in Revit (found by its Element ID)");
     tip.SetToolTip(btnPick[1], "Select by ID: select this element in Revit (found by its Element ID)");
-    tip.SetToolTip(btnDup, "Orthographic copy of this view (Work - VP-...): same direction and section box, all annotations off. Fix the issue there; the VP view stays for the snapshot.");
+    tip.SetToolTip(btnDup, "Orthographic copy of this view (WIP-Clash Viewer-VP-...): same direction and section box, all annotations off. Fix the issue there; the VP view stays for the snapshot.");
     tip.SetToolTip(cmbSt, "Action status (your own): Open / Closed / Need clarification / Action by others (another contractor has to act). The Revizto / clash status from the source is shown in the info line above and in Filter. Shared with the web navigator (navigator_status.json in the picture folder). New items start as Open.");
-    Controls.AddRange(new WF.Control[] { lblName, lblCount, lblInfo, btnPrev, btnNext, lblModel, cmbModel, lblMS, txtMS, tagPanel, lblTest, cmbTest, lblSub, cmbSub, txtSub, cmbSubSt, cmbStamp, lblAct, cmb,
-      btnPick[0], lblItem[0], btnPick[1], lblItem[1], chk, lblSize, num, btnIso, btnSnap, btnDup, cmbSt, lblDone, btnWeb, btnOpen, lblCm, txtComment, btnPost, rbBefore, rbAfter, pic, lblPic });
+    Controls.AddRange(new WF.Control[] { btnChange, lblName, lblCount, lblInfo, btnPrev, btnNext, lblModel, cmbModel, lblMS, txtMS, tagPanel, lblTest, cmbTest, lblSub, cmbSub, txtSub, cmbSubSt, cmbStamp, lblAct, cmb,
+      btnPick[0], lblItem[0], btnPick[1], lblItem[1], chk, lblSize, num, btnIso, btnSnap, btnDup, btnColor, cmbSt, lblDone, btnWeb, btnOpen, lblCm, txtComment, btnPost, rbBefore, rbAfter, pic, lblPic, lblWhy1, lblWhy2, lblWhy3, lblHint, chkHide, btnCheck, btnGoto });
 
     // model list: "All" first, then every model with its count; default = the model that matches the open file
     var groups = H.Cams.SelectMany(c => c.Models.Count > 0 ? c.Models : new List<string> { c.Model ?? "" }).GroupBy(m => m, StringComparer.OrdinalIgnoreCase).OrderBy(g => g.Key == "" ? "~" : g.Key, StringComparer.OrdinalIgnoreCase).ToList();
@@ -200,7 +226,17 @@ public class NavForm : WF.Form {
     btnPrev.Click += (s, e) => Go("Prev", 0);
     btnSnap.Click += (s, e) => Go("Snapshot", 0);
     btnIso.Click += (s, e) => Go("Isolate", 0);
+    btnChange.Click += (s, e) => { FlushComment(); H.ChangingSource = true; H.Action = "ChangeSource"; Ev.Raise(); };   // #92: the Revit API call (reopen with the dialog) runs in the ExternalEvent handler
+    tip.SetToolTip(btnChange, "Back to the source dialog: choose another folder or report, or another source (clash report / viewpoints / Revizto).");
     btnDup.Click += (s, e) => Go("Duplicate", 0);
+    btnGoto.Click += (s, e) => Go("GotoElement", 0);   // #73
+    btnColor.Click += (s, e) => Go("ToggleColors", 0);   // #80
+    tip.SetToolTip(btnColor, "Clash colours in the current view: the element in this model red (solid fill), the linked element green (its link). Click to clear them; the button then re-applies them.");
+    btnCheck.Click += (s, e) => { ShowMessage("Checking locations..."); Go("CheckAll", 0); };   // #72
+    chkHide.CheckedChanged += (s, e) => { if (!syncing) SubFilterChanged(); };   // #72
+    tip.SetToolTip(chkHide, "Hide issues that have nothing from this model at their location (found by visiting them or by Check locations). Issues not checked yet stay in the list.");
+    tip.SetToolTip(btnCheck, "Count model elements (this model and its links) at every issue's location, without changing the view.");
+    tip.SetToolTip(btnGoto, "Section box and camera around the element found by its Element ID, instead of the Revizto point.");
     btnOpen.Click += (s, e) => OpenFolder();
     btnWeb.Click += (s, e) => OpenWeb();
     rbBefore.CheckedChanged += (s, e) => ShowPicture();
@@ -236,7 +272,7 @@ public class NavForm : WF.Form {
       string st = StKeys[cmbSt.SelectedIndex];
       NavData.SetState(H.Cams[curN - 1], st, null);
       ShowDoneInfo(H.Cams[curN - 1]);
-      if (st == "closed" && WF.MessageBox.Show(this, "Marked as Closed.\n\nSave the solved snapshot now (same camera as the VP view)?", "Viewpoint Navigator", WF.MessageBoxButtons.YesNo, WF.MessageBoxIcon.Question) == WF.DialogResult.Yes)
+      if (st == "closed" && WF.MessageBox.Show(this, "Marked as Closed.\n\nSave the solved snapshot now (same camera as the VP view)?", "BIMRadar Clash Viewer", WF.MessageBoxButtons.YesNo, WF.MessageBoxIcon.Question) == WF.DialogResult.Yes)
         Go("Snapshot", 0);
     };
     // comment: type, then Post (or Enter); Edit re-opens a posted comment. Text not posted is still kept when moving on.
@@ -248,7 +284,14 @@ public class NavForm : WF.Form {
     };
     tip.SetToolTip(btnPost, "Post the comment (saved to the web navigator and its report). After posting, Edit opens it again.");
     Activated += (s, e) => { FlushComment(); if (NavData.ReloadStates() && curN > 0) Sync(curN); };
-    FormClosed += (s, e) => { FlushComment(); Instance = null; if (pic.Image != null) pic.Image.Dispose(); try { Ev.Dispose(); } catch (Exception) { } };
+    FormClosed += (s, e) => {
+      FlushComment(); Instance = null; if (pic.Image != null) pic.Image.Dispose();
+      if (H.ChangingSource) {   // #92: closed from inside its own ExternalEvent: dispose the event once Revit is idle again
+        var ev0 = Ev; EventHandler idle = null;
+        idle = (s2, e2) => { WF.Application.Idle -= idle; try { ev0.Dispose(); } catch (Exception) { } };
+        WF.Application.Idle += idle;
+      } else { try { Ev.Dispose(); } catch (Exception) { } }
+    };
   }
 
   // "select by ID" button picture: small ID card with a pointer
@@ -341,7 +384,9 @@ public class NavForm : WF.Form {
       if (i >= c.Items.Count) { lblItem[i].Text = i == 0 ? "No Element ID in the report for this clash" : ""; lblItem[i].ForeColor = SD.Color.Gray; btnPick[i].Enabled = false; continue; }
       var it = c.Items[i];
       var h = cur && i < H.Hits.Count && H.Hits[i].Id == it.Value ? H.Hits[i] : null;
-      lblItem[i].Text = (i + 1) + ". " + it.Key + "  #" + it.Value + (h != null ? "  -  " + h.Where : "");
+      // #81: Found = current text + category; not found = red "<model> #id: NOT FOUND (<Where>)"
+      if (h != null && !h.Found) lblItem[i].Text = (i + 1) + ". " + it.Key + " #" + it.Value + ": NOT FOUND (" + h.Where + ")";
+      else lblItem[i].Text = (i + 1) + ". " + it.Key + "  #" + it.Value + (h != null ? "  -  " + h.Where + (h.CatName != "" ? " \u00B7 " + h.CatName : "") : "");
       lblItem[i].ForeColor = h == null ? SD.Color.DimGray : h.Found ? SD.Color.SeaGreen : SD.Color.Firebrick;
       btnPick[i].Enabled = h != null && h.Found;
     }
@@ -407,6 +452,7 @@ public class NavForm : WF.Form {
       ShowTagsHint();
     }
     SavePref();
+    if (curN > 0 && curN <= H.Cams.Count) ShowWhy(H.Cams[curN - 1]);   // #70: search changed
     if (CurrentKey() != appliedKey) {
       ApplyFilter(true);
       if (q != "") ShowMessage("Code \"" + q + "\": " + H.Order.Count + " " + sourceWord + " shown." + (tagOn.ContainsKey("U") && !tagOn["U"] ? " Not located: " + hitGroup.Count(kv => kv.Value == "U") + " (click the orange tag to add them)." : ""));
@@ -502,7 +548,8 @@ public class NavForm : WF.Form {
       var c0 = H.Cams[i];
       bool okModel = InModel(c0, key);
       bool okTest = tkey == "" || (tkey == "\u0002open" ? c0.DefaultTest : c0.Test == tkey);
-      if (okModel && okTest && SubOk(c0)) H.Order.Add(i + 1);
+      bool okEmpty = !(chkHide != null && chkHide.Checked && H.EmptyIdx.Contains(c0.Index) && i + 1 != (keepN > 0 ? keepN : curN));   // #72
+      if (okModel && okTest && SubOk(c0) && okEmpty) H.Order.Add(i + 1);
     }
     syncing = true;
     try {
@@ -514,11 +561,12 @@ public class NavForm : WF.Form {
     if (go && H.Order.Count > 0) { H.Cur = 0; Go("Goto", 1); }
   }
 
+  // No ribbon button uses GoNext / GoPrevious since the 2026-11-24 owner decision (Next / Previous live in the window); kept for possible later use.
   public void GoNext() { Go("Next", 0); }
   public void GoPrevious() { Go("Prev", 0); }
 
   void Go(string action, int idx) {
-    if (action != "Goto" && action != "Snapshot" && EnsureFilter()) return; // model changed: already jumped to its first item
+    if (action != "Goto" && action != "Snapshot" && action != "CheckAll" && action != "ToggleColors" && EnsureFilter()) return; // model changed: already jumped to its first item
     H.Action = action; H.GoTo = idx;
     H.UseBox = chk.Checked; H.BoxM = (double)num.Value;
     Ev.Raise();
@@ -550,8 +598,16 @@ public class NavForm : WF.Form {
   // called from the download thread when a picture has arrived
   public void PictureArrived(int index, int done, int total) {
     if (IsDisposed) return;
-    Text = "Viewpoint Navigator - " + H.Source + (done < total ? "  (downloading pictures " + done + "/" + total + ")" : "");
+    Text = "BIMRadar Clash Viewer - " + H.Source + (done < total ? "  (downloading pictures " + done + "/" + total + ")" : "");
     if (index == curN && !rbAfter.Checked) ShowPicture();
+  }
+
+  // #72 / #73: after the handler stored a location result: re-apply Hide empty (the item just opened stays), then redraw
+  public void RefreshLoc(int n) {
+    if (n < 1) n = curN;
+    if (n < 1 || n > H.Cams.Count) return;
+    if (chkHide.Checked) { keepN = n; try { ApplyFilter(false); } finally { keepN = 0; } }
+    Sync(n);
   }
 
   public void Sync(int n) {
@@ -574,19 +630,73 @@ public class NavForm : WF.Form {
         lblInfo.Text = "Navisworks section plane: " + kind + "; focus point is " + dist.ToString("0.00") + " m " + (dist >= 0 ? "inside" : "outside") + " the kept side.";
       } else if (!string.IsNullOrEmpty(c.Note)) lblInfo.Text = c.Note;
       else lblInfo.Text = "No section plane was saved for this viewpoint.";
+      if (c.IsClash && c.HasNavCam) lblInfo.Text = "Camera: from Navisworks viewpoint. " + lblInfo.Text;   // #23 (silent for the normal HTML-only workflow)
       var st = NavData.GetState(c);
       cmbSt.SelectedIndex = Math.Max(0, Array.IndexOf(StKeys, NavData.StatusOf(c)));
       if (pendingN != n) { txtComment.Text = st != null ? st.c : ""; SetCommentMode(txtComment.Text.Trim() == ""); }
       ShowDoneInfo(c);
       ShowHits();
-      btnIso.Text = H.Isolated ? "Restore original view" : "Isolate in 3D view";
-      btnIso.BackColor = H.Isolated ? SD.Color.FromArgb(255, 236, 179) : SD.Color.Empty; btnIso.UseVisualStyleBackColor = !H.Isolated;
-      btnIso.Enabled = H.Isolated || (H.Cur == n && H.Hits.Any(x => x.Found));
+      ShowWhy(c);   // #70 / #71
+      SyncColors();   // #80
+      if (isClash) {   // #82: Unisolate when isolated, Isolate when not
+        btnIso.Text = H.Isolated ? "Unisolate" : "Isolate";
+        btnIso.BackColor = H.Isolated ? SD.Color.FromArgb(255, 236, 179) : SD.Color.Empty; btnIso.UseVisualStyleBackColor = !H.Isolated;
+        btnIso.Enabled = H.Cur > 0;   // a clash has been opened at least once
+      }   // #93: no else: the button is hidden and never touched for Revizto / viewpoints
       ShowPicture();
     } finally { syncing = false; }
   }
 
-  public void ShowSelection(int found, int total) {
+  // #80: button text follows the handler state
+  public NavHandler Handler { get { return H; } }   // #96: Clear Overrides button
+  public void SyncColors() { btnColor.Text = H.ColorsOn ? "Clear override" : "Create override"; }
+
+  // #70 / #71: line 1 = anchor model / zone (amber "Not anchored to a model" for a Revizto issue without anchor model),
+  // line 2 = why the item is in the list, from the search group (same keys as SearchGroup / BuildSearch)
+  void ShowWhy(VpCam c) {
+    string where = (c.Zone != "" ? " · zone " + c.Zone : "") + (c.Room != "" ? " · room " + c.Room : "");
+    var ms = (c.Models.Count > 0 ? c.Models : new List<string> { c.Model ?? "" }).Where(m => m != "").ToList();
+    if (isRevizto && (c.Model ?? "") == "") {   // #71
+      lblWhy1.ForeColor = SD.Color.FromArgb(214, 120, 30);
+      lblWhy1.Text = "Not anchored to a model" + where;
+    } else {
+      lblWhy1.ForeColor = SD.Color.Gray;
+      lblWhy1.Text = "Model: " + (ms.Count > 0 ? string.Join(", ", ms) : "none") + where;
+    }
+    string g;
+    if (modelPat != "" && hitGroup.TryGetValue(c.Index, out g)) {   // #70
+      lblWhy2.Text = g.StartsWith("M:") ? "Matched: anchor model " + g.Substring(2)
+        : g == "X" ? "Matched: zone/room (anchored to another model " + (ms.Count > 0 ? ms[0] : "") + ")"
+        : g == "Z" ? "Matched: zone " + c.Zone
+        : g == "R" ? "Matched: room " + c.Room
+        : "Not located";
+    } else lblWhy2.Text = "";
+    // #72 / #73: third line = what is at the location; yellow hint; Go to element when an element is far from the point
+    NavHandler.LocResult lr = null;
+    if (isRevizto) H.Loc.TryGetValue(c.Index, out lr);
+    bool other = false;
+    if (isRevizto) H.OtherIdx.TryGetValue(c.Index, out other);
+    if (other) {   // #79: takes precedence over the grey summary; merges the empty-view warning
+      lblWhy3.ForeColor = SD.Color.Firebrick;
+      lblWhy3.Text = "Anchored to another model: " + ((c.Model ?? "") != "" ? c.Model : string.Join(", ", ms)) + " \u2014 the view may be empty or wrong here.";
+    }
+    else if (lr == null) lblWhy3.Text = "";
+    else if (lr.Empty) { lblWhy3.ForeColor = SD.Color.Firebrick; lblWhy3.Text = "Nothing from this model at this location"; }
+    else { lblWhy3.ForeColor = SD.Color.Gray; lblWhy3.Text = lr.Summary; }
+    string hint = lr == null ? "" : lr.Hint;
+    lblHint.Text = hint; lblHint.Visible = hint != "";
+    bool gt = lr != null && lr.OffsetM != null && lr.OffsetM.Value > H.OffsetLimit;
+    btnGoto.Visible = gt;
+    if (!isClash) btnDup.Width = gt ? 232 : 356;   // #80 / #85: the clash layout is fixed (half width)
+  }
+
+  public void ShowSelection(int found, int total, bool clash, string linkNote) {
+    if (clash && total > 0 && found == 0) {   // #81: never silently show the box
+      lblInfo.ForeColor = SD.Color.Firebrick;
+      lblInfo.Text = "Clash elements not found in this model or its links: the view shows everything in the box.";
+      return;
+    }
+    if (!string.IsNullOrEmpty(linkNote)) lblInfo.Text = linkNote + ". " + lblInfo.Text;   // #81
     lblInfo.Text = (found > 0 ? "Found " + found + " of " + total + " element(s) by Element ID. " : "Element(s) not found in this model or its links. ") + lblInfo.Text;
   }
 

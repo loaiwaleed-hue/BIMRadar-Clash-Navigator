@@ -50,11 +50,12 @@ jobs:
           path: dist/Standalone
 
       - name: Publish unzipped build to test-build branch
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/enhancements')
         shell: bash
         run: |
           set -euo pipefail
           OUT="$RUNNER_TEMP/test-build"
+          if [ "$GITHUB_REF_NAME" = "main" ]; then TB=test-build; else TB=test-build-$GITHUB_REF_NAME; fi
           rm -rf "$OUT"
           mkdir -p "$OUT/pyRevit"
           cp -r dist/pyRevit/BIMRadar-ClashNavigator.extension "$OUT/pyRevit/BIMRadar-ClashNavigator.extension"
@@ -69,10 +70,10 @@ jobs:
           git init
           git config user.name "github-actions[bot]"
           git config user.email "41898799+github-actions[bot]@users.noreply.github.com"
-          git checkout -b test-build
+          git checkout -b "$TB"
           git add -A
           git commit -m "Test build ${GITHUB_SHA::7}"
-          git push --force https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git test-build
+          git push --force https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git "$TB"
 
       - name: Release notes from CHANGELOG
         if: startsWith(github.ref, 'refs/tags/v')

@@ -71,6 +71,7 @@ public static class NavData {
       var shared = new XYZ(c.RawPos[0] / FT, c.RawPos[1] / FT, c.RawPos[2] / FT);
       c.Name = v.GetAttribute("name");
       c.Guid = v.GetAttribute("guid");
+      c.VpFolder = FolderOf(v);   // #23
       c.Index = idx;
       c.Img = "vp" + idx.ToString("0000") + ".jpg";
       c.Eye = toInt.OfPoint(shared);
@@ -108,7 +109,15 @@ public static class NavData {
     } catch (Exception) { }
     return null;
   }
-  static bool IsViewpointXml(string path) {
+  // #23: name of the nearest viewfolder around a view
+  static string FolderOf(XmlElement v) {
+    for (var n = v.ParentNode; n != null; n = n.ParentNode) {
+      var e = n as XmlElement;
+      if (e != null && e.Name == "viewfolder") return e.GetAttribute("name");
+    }
+    return "";
+  }
+  internal static bool IsViewpointXml(string path) {   // #23: internal, reused by ClashData
     try { using (var r = new System.IO.StreamReader(path)) { var buf = new char[20000]; int n = r.Read(buf, 0, buf.Length); var s = new string(buf, 0, n); return s.Contains("<view ") || s.Contains("<viewpoint"); } }
     catch (Exception) { return false; }
   }

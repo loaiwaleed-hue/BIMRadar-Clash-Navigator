@@ -23,7 +23,7 @@ public class SourceDialog : WF.Form {
     "    Item ID (and Grid Location). Report Format: HTML (Tabular).\n" +
     "3. Write Report > save it into the new folder. Only the HTML is needed (no XML).\n" +
     "4. Click Next and pick that .html. Its pictures folder (..._files) and the\n" +
-    "    navigator page (web report) are kept in the same folder.",
+    "    navigator page (web report) are kept in the same folder.",  // owner 2026-11-24: HTML only, no viewpoint export hint
     "1. Create a new empty folder, e.g. ...\\VP 2026-11-23\\\n" +
     "2. Navisworks: Saved Viewpoints > select the viewpoints you need\n" +
     "    (delete the ones you don't need, then select all).\n" +
@@ -55,7 +55,7 @@ public class SourceDialog : WF.Form {
   }
 
   public SourceDialog(string preselect) {
-    Text = "Viewpoint Navigator - what are you opening?";
+    Text = "BIMRadar Clash Viewer - what are you opening?";
     FormBorderStyle = WF.FormBorderStyle.FixedDialog; MinimizeBox = false; MaximizeBox = false;
     StartPosition = WF.FormStartPosition.CenterParent;
     ClientSize = new SD.Size(540, 378);

@@ -2,6 +2,8 @@
 
 These are the standing rules for every ticket. Read them before implementing anything.
 
+The tool's user-facing name is **Clash Viewer** (owner, 2026-11-23); the internal names (assembly, namespace, extension folder, repo) keep ClashNavigator.
+
 ## Product family
 - **BIMRadar** is ONE Revit ribbon tab. Every tool has its own repo, and each repo adds only its own panel or buttons to that tab.
 - Panels, in this order (decided #47):
@@ -10,8 +12,8 @@ These are the standing rules for every ticket. Read them before implementing any
   - **Fix**: ID / type fixes, later family rename and more
   - **Review**: Clash Navigator, warnings navigator
   - **Audit**: ISO 19650 / BEP / client standards
-- Icons: line style, 32 px large / 16 px small, one accent colour per panel: Health red, Check green, Fix orange, Review blue, Audit dark grey.
-- This repo adds to **Review**: a large **Clash Navigator** button + small **Next ▸** / **◂ Previous** buttons (#48).
+- Icons: full-colour BIM symbol set (owner, 2026-11-23), 32 px large / 16 px small, light + dark variants. See `assets/icons/README.md`.
+- This repo adds to **Review**: one large **Clash Viewer** button (Next/Previous removed by the owner 2026-11-24, they live in the window) (#48).
 - Each tool is public or private by the owner's choice, decided per tool. **This repo is PUBLIC** (MIT).
 - Sister repo: `loaiwaleed-hue/qaqc-checker` (private: LOI Compliance Report, Select IDs, Fix Element IDs, Fix Type Names). It moves under the BIMRadar tab in a later ticket in that repo.
 

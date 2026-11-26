@@ -73,22 +73,16 @@ namespace BIMRadar.ClashNavigator.Standalone
             string asm = typeof(App).Assembly.Location;
             string ns = "BIMRadar.ClashNavigator.Standalone.";
 
-            var openData = new PushButtonData("BIMRadar_ClashNavigator_Open", "Clash\nNavigator", asm, ns + "OpenCommand");
+            var openData = new PushButtonData("BIMRadar_ClashNavigator_Open", "Clash\nViewer", asm, ns + "OpenCommand");
             openData.ToolTip = "Step through Navisworks clash tests, saved viewpoints or Revizto issues in Revit, with a web report and Excel export.";
-            SetImages(openData, "ClashNavigator");
-
-            string nextPrevTip = "Go to the next/previous item in the open Clash Navigator (assign a keyboard shortcut in Revit).";
-            var nextData = new PushButtonData("BIMRadar_ClashNavigator_Next", "Next \u25B8", asm, ns + "NextCommand");
-            nextData.ToolTip = nextPrevTip;
-            SetImages(nextData, "Next");
-
-            var prevData = new PushButtonData("BIMRadar_ClashNavigator_Previous", "\u25C2 Previous", asm, ns + "PreviousCommand");
-            prevData.ToolTip = nextPrevTip;
-            SetImages(prevData, "Previous");
+            SetImages(openData, "ClashViewer");
 
             panel.AddItem(openData);
-            // AddStackedItems(RibbonItemData, RibbonItemData) exists in Revit 2022-2027.
-            panel.AddStackedItems(nextData, prevData);
+
+            var clearData = new PushButtonData("BIMRadar_ClashNavigator_ClearOverrides", "Clear\nOverrides", asm, ns + "ClearOverridesCommand");
+            clearData.ToolTip = "Remove element colour/halftone/transparency overrides in the active view (also Clash Viewer colours). Filters, templates and the model are not changed.";
+            SetImages(clearData, "ClearOverrides");
+            panel.AddItem(clearData);
         }
 
         private static void SetImages(PushButtonData data, string baseName)
