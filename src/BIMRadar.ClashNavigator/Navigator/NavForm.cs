@@ -575,7 +575,7 @@ public class NavForm : WF.Form {
       snapArmed = true;
       btnSnap.Text = "Capture view"; btnSnap.BackColor = SD.Color.FromArgb(255, 230, 140);
       lblInfo.ForeColor = SD.Color.FromArgb(90, 60, 0);
-      lblInfo.Text = "Set the Revit view as the solved picture should look (orbit, zoom, pan; any view, e.g. the WIP copy). Then click Capture view. The whole view is saved as you see it. Esc cancels.";
+      lblInfo.Text = "Set the Revit view as the solved picture should look (any view), then click Capture view. Esc cancels.";
       return;
     }
     DisarmSnap();
