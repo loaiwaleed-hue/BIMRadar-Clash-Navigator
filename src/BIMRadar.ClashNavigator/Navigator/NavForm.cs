@@ -186,8 +186,8 @@ public class NavForm : WF.Form {
     if (y + picH + below > clientH) ClientSize = new SD.Size(380, y + picH + below);
 
     var tip = new WF.ToolTip();
-    if (isClash) tip.SetToolTip(btnSnap, "Click, set the Revit view as the solved picture should look, then click again to capture: the whole active view is saved to <picture>_after.jpg in:\n" + (H.PicDir ?? "") + "\nShortcut: Ctrl+S");
-    else tip.SetToolTip(btnSnap, "Exports the VP view's frame (same field of view as the source picture) to <picture>_after.jpg in:\n" + (H.PicDir ?? "") + "\nShortcut: Ctrl+S");
+    if (isClash) tip.SetToolTip(btnSnap, "Click, set the Revit view as the solved picture should look, then click again to capture: the whole active view is saved to <picture>_after.jpg in:\n" + (H.PicDir ?? ""));
+    else tip.SetToolTip(btnSnap, "Exports the VP view's frame (same field of view as the source picture) to <picture>_after.jpg in:\n" + (H.PicDir ?? ""));
     tip.SetToolTip(btnWeb, "Open the web navigator for this project");
     tip.SetToolTip(btnOpen, H.PicDir ?? "");
     tip.SetToolTip(pic, "Click to open the picture full size");
@@ -273,7 +273,7 @@ public class NavForm : WF.Form {
       string st = StKeys[cmbSt.SelectedIndex];
       NavData.SetState(H.Cams[curN - 1], st, null);
       ShowDoneInfo(H.Cams[curN - 1]);
-      if (st == "closed" && isClash) { if (!snapArmed) SnapClick(); }   // #100: clash: prepare the view, then Capture view
+      if (st == "closed" && isClash) { if (!snapArmed) SnapClick(); }   // #100: clash: prepare the view, then click again
       else if (st == "closed" && WF.MessageBox.Show(this, "Marked as Closed.\n\nSave the solved snapshot now (same camera as the VP view)?", "BIMRadar Clash Viewer", WF.MessageBoxButtons.YesNo, WF.MessageBoxIcon.Question) == WF.DialogResult.Yes)
         Go("Snapshot", 0);
     };
@@ -567,7 +567,7 @@ public class NavForm : WF.Form {
   public void GoNext() { Go("Next", 0); }
   public void GoPrevious() { Go("Prev", 0); }
 
-  // #100: clash snapshot in two clicks: 1) hint + button becomes "Capture view" (owner sets the camera in any view), 2) copy the active view.
+  // #100: clash snapshot in two clicks: 1) hint + button becomes "Click again to capture" (owner sets the camera in any view), 2) copy the active view.
   bool snapArmed;
   void SnapClick() {
     if (!isClash) { Go("Snapshot", 0); return; }
@@ -599,7 +599,6 @@ public class NavForm : WF.Form {
     if ((ActiveControl is WF.TextBoxBase) && (keyData == WF.Keys.Right || keyData == WF.Keys.Left || keyData == WF.Keys.PageDown || keyData == WF.Keys.PageUp)) return base.ProcessCmdKey(ref msg, keyData);
     if (keyData == WF.Keys.Right || keyData == WF.Keys.PageDown) { Go("Next", 0); return true; }
     if (keyData == WF.Keys.Left || keyData == WF.Keys.PageUp) { Go("Prev", 0); return true; }
-    if (keyData == (WF.Keys.Control | WF.Keys.S)) { SnapClick(); return true; }
     if (keyData == WF.Keys.Escape && snapArmed) { DisarmSnap(); lblInfo.Text = ""; return true; }
     return base.ProcessCmdKey(ref msg, keyData);
   }
