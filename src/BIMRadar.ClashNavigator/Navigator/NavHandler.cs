@@ -734,7 +734,7 @@ public class NavHandler : IExternalEventHandler {
           if (Form != null && !Form.IsDisposed) Form.ShowError("Open a VP view first (click Next or Previous), then save the snapshot.");
           return;
         }
-        string saved = SaveSnapshot(doc, tv, Cams[cur - 1]);
+        string saved = SaveSnapshot(doc, tv, Cams[cur - 1], uidoc);
         Cur = cur;
         if (Form != null && !Form.IsDisposed) { Form.Sync(cur); Form.ShowSaved(saved); }
         return;
@@ -894,7 +894,35 @@ public class NavHandler : IExternalEventHandler {
   }
 
   // #97: exports the VP view at high resolution, auto-crops to the visible content (+12% margin) and saves it at the source picture's shape.
-  string SaveSnapshot(Document doc, View3D v, VpCam c) {
+  // #99: Navisworks clash: copy what the user sees in the Revit view (same camera, shaded), the part the window does not cover,
+  // centred at the picture's shape. UIView.GetWindowRectangle / UIDocument.RefreshActiveView exist in Revit 2022-2027. Null when not possible.
+  SD.Bitmap ScreenSnap(UIDocument uidoc, View3D v, double aspect) {
+    try {
+      if (uidoc == null || uidoc.ActiveView == null || uidoc.ActiveView.Id != v.Id || aspect <= 0.01) return null;
+      var uiv = uidoc.GetOpenUIViews().FirstOrDefault(u => u.ViewId == v.Id);
+      if (uiv == null) return null;
+      uidoc.RefreshActiveView();
+      WF.Application.DoEvents();
+      var wr = uiv.GetWindowRectangle();
+      int l = wr.Left + 4, t = wr.Top + 4, r = wr.Right - 4, b = wr.Bottom - 4;
+      if (Form != null && !Form.IsDisposed && Form.Visible && Form.WindowState != WF.FormWindowState.Minimized) {
+        var fr = Form.Bounds;
+        bool overlap = fr.Right > l && fr.Left < r && fr.Bottom > t && fr.Top < b;
+        if (overlap) {
+          if ((fr.Left + fr.Right) / 2.0 < (l + r) / 2.0) l = Math.Max(l, fr.Right + 4); else r = Math.Min(r, fr.Left - 4);
+        }
+      }
+      int w = r - l, h = b - t;
+      if (w < 150 || h < 150) return null;
+      int cw = w, ch = (int)Math.Round(w / aspect);
+      if (ch > h) { ch = h; cw = (int)Math.Round(h * aspect); }
+      var bmp = new SD.Bitmap(cw, ch, SD.Imaging.PixelFormat.Format32bppArgb);
+      using (var g = SD.Graphics.FromImage(bmp)) g.CopyFromScreen(l + (w - cw) / 2, t + (h - ch) / 2, 0, 0, new SD.Size(cw, ch));
+      return bmp;
+    } catch (Exception) { return null; }
+  }
+
+  string SaveSnapshot(Document doc, View3D v, VpCam c, UIDocument uidoc = null) {
     if (string.IsNullOrWhiteSpace(PicDir)) throw new Exception("No picture folder is set.");
     System.IO.Directory.CreateDirectory(PicDir);
     string tmp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "vpnav_" + System.Guid.NewGuid().ToString("N"));
@@ -904,6 +932,25 @@ public class NavHandler : IExternalEventHandler {
       using (var before = NavData.LoadImageNoLock(NavData.BeforePath(PicDir, c))) {
         if (before != null) { double k = 1024.0 / Math.Max(before.Width, before.Height); outW = (int)Math.Round(before.Width * k); outH = (int)Math.Round(before.Height * k); }
         else { double asp = c.Aspect > 0.1 ? c.Aspect : 1.0; outH = (int)Math.Round(outW / asp); }
+      }
+      if (c.IsClash) {   // #99: Navisworks clash: the on-screen picture; falls back to the export below
+        using (var shot = ScreenSnap(uidoc, v, (double)outW / outH)) {
+          if (shot != null) {
+            string dest0 = NavData.AfterPath(PicDir, c);
+            string tmp0 = System.IO.Path.Combine(tmp, "out.jpg");
+            using (var bmp0 = new SD.Bitmap(outW, outH))
+            using (var g0 = SD.Graphics.FromImage(bmp0)) {
+              g0.InterpolationMode = SD.Drawing2D.InterpolationMode.HighQualityBicubic;
+              g0.DrawImage(shot, new SD.Rectangle(0, 0, outW, outH));
+              var enc0 = SD.Imaging.ImageCodecInfo.GetImageEncoders().First(e => e.FormatID == SD.Imaging.ImageFormat.Jpeg.Guid);
+              var ps0 = new SD.Imaging.EncoderParameters(1);
+              ps0.Param[0] = new SD.Imaging.EncoderParameter(SD.Imaging.Encoder.Quality, 92L);
+              bmp0.Save(tmp0, enc0, ps0);
+            }
+            System.IO.File.Copy(tmp0, dest0, true);
+            return dest0;
+          }
+        }
       }
       var o = new ImageExportOptions();
       o.ExportRange = ExportRange.SetOfViews;
