@@ -29,10 +29,10 @@ for %%Y in (2022 2023 2024 2025 2026 2027) do (
 
 echo.
 if exist "%PYCFG%" (
-  findstr /i /c:"BIMRadar-ClashNavigator.extension" "%PYCFG%" >nul 2>&1
+  findstr /i /r /c:"^userextensions.*BIMRadar" "%PYCFG%" >nul 2>&1
   if not errorlevel 1 (
-    echo WARNING: pyRevit_config.ini mentions BIMRadar-ClashNavigator.extension.
-    echo The add-in will stay hidden while the pyRevit extension is registered.
+    echo WARNING: pyRevit loads a BIMRadar folder ^(Settings ^> Custom Extension Directories^).
+    echo If it holds the Clash Viewer extension, this add-in stays hidden to avoid two Review panels.
     echo.
   )
 )
