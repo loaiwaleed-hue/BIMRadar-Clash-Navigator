@@ -149,7 +149,7 @@ public class NavForm : WF.Form {
     if (isClash) {
       y += 40;
       btnDup = new WF.Button { Left = 12, Top = y, Width = 176, Height = 34, Text = "Duplicate 3D view" };
-      btnSnap = new WF.Button { Left = 192, Top = y, Width = 176, Height = 34, Text = "Take snapshot", Font = new SD.Font("Segoe UI Semibold", 9.5f) };
+      btnSnap = new WF.Button { Left = 192, Top = y, Width = 176, Height = 34, Text = "Save snapshot", Font = new SD.Font("Segoe UI Semibold", 9.5f) };
     } else {
       btnSnap = new WF.Button { Left = noIso ? 12 : 192, Top = y, Width = noIso ? 356 : 176, Height = 34, Text = "Save snapshot", Font = new SD.Font("Segoe UI Semibold", 9.5f) };
       y += 40;
@@ -186,7 +186,7 @@ public class NavForm : WF.Form {
     if (y + picH + below > clientH) ClientSize = new SD.Size(380, y + picH + below);
 
     var tip = new WF.ToolTip();
-    if (isClash) tip.SetToolTip(btnSnap, "Solved snapshot in 2 steps: click, set up the Revit view as the solved picture should look, then click Capture current view: the whole active view is saved to <picture>_after.jpg in:\n" + (H.PicDir ?? "") + "\nShortcut: Ctrl+S");
+    if (isClash) tip.SetToolTip(btnSnap, "Solved snapshot in 2 steps: click, set up the Revit view as the solved picture should look, then click Capture view: the whole active view is saved to <picture>_after.jpg in:\n" + (H.PicDir ?? "") + "\nShortcut: Ctrl+S");
     else tip.SetToolTip(btnSnap, "Exports the VP view's frame (same field of view as the source picture) to <picture>_after.jpg in:\n" + (H.PicDir ?? "") + "\nShortcut: Ctrl+S");
     tip.SetToolTip(btnWeb, "Open the web navigator for this project");
     tip.SetToolTip(btnOpen, H.PicDir ?? "");
@@ -573,7 +573,7 @@ public class NavForm : WF.Form {
     if (!isClash) { Go("Snapshot", 0); return; }
     if (!snapArmed) {
       snapArmed = true;
-      btnSnap.Text = "Capture current view"; btnSnap.BackColor = SD.Color.FromArgb(255, 230, 140);
+      btnSnap.Text = "Capture view"; btnSnap.BackColor = SD.Color.FromArgb(255, 230, 140);
       lblInfo.ForeColor = SD.Color.FromArgb(90, 60, 0);
       lblInfo.Text = "Solved snapshot: follow the 2 steps in the picture area. Esc cancels.";
       ShowPicture();   // #101: shows the step card instead of a picture while armed
@@ -585,7 +585,7 @@ public class NavForm : WF.Form {
   void DisarmSnap() {
     if (!snapArmed) return;
     snapArmed = false;
-    btnSnap.Text = isClash ? "Take snapshot" : "Save snapshot"; btnSnap.BackColor = SD.SystemColors.Control; btnSnap.UseVisualStyleBackColor = true;
+    btnSnap.Text = "Save snapshot"; btnSnap.BackColor = SD.SystemColors.Control; btnSnap.UseVisualStyleBackColor = true;
     ShowPicture();
   }
 
@@ -603,7 +603,7 @@ public class NavForm : WF.Form {
       g.DrawString("Solved snapshot in 2 steps", title, ink, new SD.RectangleF(x, y, tw, 24)); y += 30;
       string[] steps = {
         "1.  In Revit, set up the 3D view the way the solved clash should be shown: orbit, zoom, pan. Any 3D view works, e.g. the WIP copy.",
-        "2.  Click the yellow \"Capture current view\" button. Everything you see in that Revit view is saved as the solved picture.",
+        "2.  Click the yellow \"Capture view\" button. Everything you see in that Revit view is saved as the solved picture.",
         "To cancel: press Esc or go to another clash." };
       foreach (var t in steps) {
         var sz = g.MeasureString(t, body, (int)tw);
@@ -612,7 +612,7 @@ public class NavForm : WF.Form {
       }
     }
     pic.Image = bmp;
-    lblPic.Text = "Waiting for Capture current view...";
+    lblPic.Text = "Waiting for Capture view...";
   }
 
   void Go(string action, int idx) {
