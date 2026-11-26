@@ -1,17 +1,22 @@
 # Changelog
 
-## Unreleased
-- Review panel now has one button, Clash Viewer. The ribbon Next / Previous buttons were removed (owner decision 2026-11-24); Next / Previous stay in the window.
+## v1.0.0 (2026-11-26)
+First public release of **BIMRadar Clash Viewer**: BIMRadar tab › Review panel (Clash Viewer, Clear Overrides). pyRevit extension and standalone add-in for Revit 2022–2027. Owner-tested in Revit 2022 (pyRevit) and Revit 2024 (standalone).
 
-## Unreleased (branch `enhancements`, PR #75, owner-tested in Revit 2022 on 2026-11-24)
-- Tool renamed **Clash Viewer** (user-facing); full-colour BIM icon family; one ribbon button (Next/Previous live in the window)
-- Revizto: shaded/Fine views, annotations off except section box (#68, #77); no Isolate (#69, #93); why-listed line (#70); Not anchored (#71); empty-view check, Check locations, Hide empty (#72); location hints + Go to element (#73); other-model warning (#79)
-- Clash: section box around the clash elements (#74); WIP-Clash Viewer- duplicates (#78); Navisworks colours item 1 red / item 2 green incl. linked (#80, #83); hit diagnostics (#81); Isolate/Unisolate (#82); close perspective camera fitted to all clash elements with the real field of view, clear of the window (#84–#87); innermost model + category safety check (#90); optional exact camera from a viewpoints XML (#23)
-- Clash report reader accepts any Navisworks report contents: Layer column (#89), no Summary (#91), clear message for missing essentials (#93); pure parser with regression tests (#94)
-- Reopen last source per project + ◂ Back button (#92)
-- pyRevit loader loads from bytes: no blocked-DLL error, no file lock (#88); standalone install unblocks files (#95)
+### Clash Viewer
+- Navisworks HTML clash reports, Navisworks viewpoints and Revizto issues in one window. Next and Previous are in the window.
+- Clash: section box around the clash elements (#74), Navisworks colours (item 1 red, item 2 green, linked elements included) (#80, #83), Isolate/Unisolate (#82), and a close perspective camera fitted to all clash elements, clear of the window (#84–#87).
+- Clash report reader accepts any Navisworks report contents: Layer column (#89), no Summary (#91), and a clear message when essential columns are missing (#93, #94).
+- Save snapshot for clashes: click once, set the Revit view as you want the solved picture, then click again to capture it exactly as on screen (#97, #99, #100, #102). Navisworks viewpoints and Revizto keep the automatic export.
+- Revizto: shaded Fine views, why-listed line, Not anchored, empty-view check, Check locations, Hide empty, Go to element, and an other-model warning (#68–#73, #77, #79).
+- Reopens the last source per project, with a ◂ Back button to change it (#92). WIP-Clash Viewer- duplicates (#78).
+- Clear Overrides ribbon button (#96).
 
-## v0.1.0 (unreleased, waiting for owner test #67)
+### Install
+- pyRevit loader reads the DLL from bytes: no blocked-DLL error, no file lock (#88).
+- Standalone `install.bat` unblocks its files (#95). It now hides only when pyRevit really loads the extension (#98).
+
+### Foundation (from the v0.1.0 plan)
 - #55: Three builds (net48, net8.0-windows, net10.0-windows) with CI, unit tests, zips and an unzipped `test-build` branch.
 - #60: Review panel icons (Clash Navigator, Next, Previous), light and dark, 32 px and 16 px.
 - #61: The AICon routine `viewpoint-navigator-window` is ported into the add-in, with a diff verification.

@@ -131,7 +131,10 @@ namespace BIMRadar.ClashNavigator.Standalone
             string ini = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "pyRevit", "pyRevit_config.ini");
             if (!File.Exists(ini)) return null;
             string text = File.ReadAllText(ini);
-            if (text.IndexOf(ExtensionName, StringComparison.OrdinalIgnoreCase) >= 0) return "listed in pyRevit_config.ini";
+            // #98: pyRevit keeps an [<ext>] settings section after its folder is removed, so the section name
+            // alone is not proof. Only a loaded folder counts: pyRevit's default Extensions folder or a userextensions path.
+            string defDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "pyRevit", "Extensions");
+            try { if (Directory.Exists(Path.Combine(defDir, ExtensionName))) return "found in " + defDir; } catch (Exception) { }
 
             foreach (string line in text.Split('\n'))
             {

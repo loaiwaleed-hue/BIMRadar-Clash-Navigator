@@ -730,6 +730,12 @@ public class NavHandler : IExternalEventHandler {
           if (Form != null && !Form.IsDisposed) Form.ShowOtherModel(Cams[cur - 1].Model, doc.Title);
           return;
         }
+        if (cur >= 1 && cur <= count && Cams[cur - 1].IsClash) {   // #100: clash: copy the active view as the owner set it
+          string shot = CaptureView(uidoc, Cams[cur - 1]);
+          Cur = cur;
+          if (Form != null && !Form.IsDisposed) { Form.Sync(cur); Form.ShowSaved(shot); }
+          return;
+        }
         if (tv == null || cur < 1 || cur > count) {
           if (Form != null && !Form.IsDisposed) Form.ShowError("Open a VP view first (click Next or Previous), then save the snapshot.");
           return;
@@ -894,6 +900,46 @@ public class NavHandler : IExternalEventHandler {
   }
 
   // #97: exports the VP view at high resolution, auto-crops to the visible content (+12% margin) and saves it at the source picture's shape.
+  // #100: Navisworks clash: the owner sets the camera himself (any view, e.g. the WIP copy), then the whole active Revit view is copied
+  // from the screen, the Clash Viewer window hidden meanwhile. UIView.GetWindowRectangle / UIDocument.RefreshActiveView exist in Revit 2022-2027.
+  string CaptureView(UIDocument uidoc, VpCam c) {
+    if (string.IsNullOrWhiteSpace(PicDir)) throw new Exception("No picture folder is set.");
+    var av = uidoc.ActiveView;
+    var uiv = av == null ? null : uidoc.GetOpenUIViews().FirstOrDefault(u => u.ViewId == av.Id);
+    if (uiv == null) throw new Exception("No active view to capture.");
+    System.IO.Directory.CreateDirectory(PicDir);
+    bool shown = Form != null && !Form.IsDisposed && Form.Visible;
+    try {
+      if (shown) Form.Hide();
+      uidoc.RefreshActiveView();
+      for (int i = 0; i < 4; i++) { WF.Application.DoEvents(); System.Threading.Thread.Sleep(60); }
+      var wr = uiv.GetWindowRectangle();
+      int l = wr.Left + 2, t = wr.Top + 2, w = wr.Right - wr.Left - 4, h = wr.Bottom - wr.Top - 4;
+      if (w < 100 || h < 100) throw new Exception("The view is too small or not visible on screen.");
+      double k = Math.Min(1.0, 1600.0 / Math.Max(w, h));
+      int ow = (int)Math.Round(w * k), oh = (int)Math.Round(h * k);
+      string dest = NavData.AfterPath(PicDir, c);
+      string tmpOut = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "vpnav_" + System.Guid.NewGuid().ToString("N") + ".jpg");
+      using (var shot = new SD.Bitmap(w, h, SD.Imaging.PixelFormat.Format32bppArgb)) {
+        using (var gs = SD.Graphics.FromImage(shot)) gs.CopyFromScreen(l, t, 0, 0, new SD.Size(w, h));
+        using (var bmp = new SD.Bitmap(ow, oh))
+        using (var g = SD.Graphics.FromImage(bmp)) {
+          g.InterpolationMode = SD.Drawing2D.InterpolationMode.HighQualityBicubic;
+          g.DrawImage(shot, new SD.Rectangle(0, 0, ow, oh));
+          var enc = SD.Imaging.ImageCodecInfo.GetImageEncoders().First(e => e.FormatID == SD.Imaging.ImageFormat.Jpeg.Guid);
+          var ps = new SD.Imaging.EncoderParameters(1);
+          ps.Param[0] = new SD.Imaging.EncoderParameter(SD.Imaging.Encoder.Quality, 92L);
+          bmp.Save(tmpOut, enc, ps);
+        }
+      }
+      System.IO.File.Copy(tmpOut, dest, true);
+      try { System.IO.File.Delete(tmpOut); } catch (Exception) { }
+      return dest;
+    } finally {
+      if (shown && Form != null && !Form.IsDisposed) Form.Show();
+    }
+  }
+
   string SaveSnapshot(Document doc, View3D v, VpCam c) {
     if (string.IsNullOrWhiteSpace(PicDir)) throw new Exception("No picture folder is set.");
     System.IO.Directory.CreateDirectory(PicDir);
