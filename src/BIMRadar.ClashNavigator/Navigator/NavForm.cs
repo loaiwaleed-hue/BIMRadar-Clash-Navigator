@@ -568,7 +568,7 @@ public class NavForm : WF.Form {
   public void GoPrevious() { Go("Prev", 0); }
 
   // #100: clash snapshot in two clicks: 1) hint + button becomes "Click again to capture" (owner sets the camera in any view), 2) copy the active view.
-  bool snapArmed;
+  bool snapArmed; string hintBefore; bool hintWasVisible;
   void SnapClick() {
     if (!isClash) { Go("Snapshot", 0); return; }
     if (!snapArmed) {
@@ -576,6 +576,8 @@ public class NavForm : WF.Form {
       btnSnap.Text = "Click again to capture"; btnSnap.BackColor = SD.Color.FromArgb(255, 230, 140);
       lblInfo.ForeColor = SD.Color.FromArgb(90, 60, 0);
       lblInfo.Text = "Set the Revit view as the solved picture should look (any view), then click the button again to capture. Esc cancels.";
+      hintBefore = lblHint.Text; hintWasVisible = lblHint.Visible;   // #102: also in the yellow hint box, so it is seen
+      lblHint.Text = "Snapshot: set the Revit view as the solved picture should look, then click \"Click again to capture\". Esc cancels."; lblHint.Visible = true; lblHint.BringToFront();
       return;
     }
     DisarmSnap();
@@ -585,6 +587,7 @@ public class NavForm : WF.Form {
     if (!snapArmed) return;
     snapArmed = false;
     btnSnap.Text = "Save snapshot"; btnSnap.BackColor = SD.SystemColors.Control; btnSnap.UseVisualStyleBackColor = true;
+    lblHint.Text = hintBefore ?? ""; lblHint.Visible = hintWasVisible && lblHint.Text != "";
   }
 
   void Go(string action, int idx) {
