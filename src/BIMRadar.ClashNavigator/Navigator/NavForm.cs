@@ -186,7 +186,7 @@ public class NavForm : WF.Form {
     if (y + picH + below > clientH) ClientSize = new SD.Size(380, y + picH + below);
 
     var tip = new WF.ToolTip();
-    if (isClash) tip.SetToolTip(btnSnap, "Click, set the Revit view as the solved picture should look, then click Capture view: the whole active view is saved to <picture>_after.jpg in:\n" + (H.PicDir ?? "") + "\nShortcut: Ctrl+S");
+    if (isClash) tip.SetToolTip(btnSnap, "Click, set the Revit view as the solved picture should look, then click again to capture: the whole active view is saved to <picture>_after.jpg in:\n" + (H.PicDir ?? "") + "\nShortcut: Ctrl+S");
     else tip.SetToolTip(btnSnap, "Exports the VP view's frame (same field of view as the source picture) to <picture>_after.jpg in:\n" + (H.PicDir ?? "") + "\nShortcut: Ctrl+S");
     tip.SetToolTip(btnWeb, "Open the web navigator for this project");
     tip.SetToolTip(btnOpen, H.PicDir ?? "");
@@ -573,9 +573,9 @@ public class NavForm : WF.Form {
     if (!isClash) { Go("Snapshot", 0); return; }
     if (!snapArmed) {
       snapArmed = true;
-      btnSnap.Text = "Capture view"; btnSnap.BackColor = SD.Color.FromArgb(255, 230, 140);
+      btnSnap.Text = "Click again to capture"; btnSnap.BackColor = SD.Color.FromArgb(255, 230, 140);
       lblInfo.ForeColor = SD.Color.FromArgb(90, 60, 0);
-      lblInfo.Text = "Set the Revit view as the solved picture should look (any view), then click Capture view. Esc cancels.";
+      lblInfo.Text = "Set the Revit view as the solved picture should look (any view), then click the button again to capture. Esc cancels.";
       return;
     }
     DisarmSnap();
