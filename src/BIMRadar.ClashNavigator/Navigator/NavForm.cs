@@ -186,7 +186,8 @@ public class NavForm : WF.Form {
     if (y + picH + below > clientH) ClientSize = new SD.Size(380, y + picH + below);
 
     var tip = new WF.ToolTip();
-    tip.SetToolTip(btnSnap, "Exports the VP view's frame (same field of view as the source picture) to <picture>_after.jpg in:\n" + (H.PicDir ?? "") + "\nShortcut: Ctrl+S");
+    if (isClash) tip.SetToolTip(btnSnap, "Click, set the Revit view as the solved picture should look, then click Capture view: the whole active view is saved to <picture>_after.jpg in:\n" + (H.PicDir ?? "") + "\nShortcut: Ctrl+S");
+    else tip.SetToolTip(btnSnap, "Exports the VP view's frame (same field of view as the source picture) to <picture>_after.jpg in:\n" + (H.PicDir ?? "") + "\nShortcut: Ctrl+S");
     tip.SetToolTip(btnWeb, "Open the web navigator for this project");
     tip.SetToolTip(btnOpen, H.PicDir ?? "");
     tip.SetToolTip(pic, "Click to open the picture full size");
@@ -224,7 +225,7 @@ public class NavForm : WF.Form {
 
     btnNext.Click += (s, e) => Go("Next", 0);
     btnPrev.Click += (s, e) => Go("Prev", 0);
-    btnSnap.Click += (s, e) => Go("Snapshot", 0);
+    btnSnap.Click += (s, e) => SnapClick();   // #100
     btnIso.Click += (s, e) => Go("Isolate", 0);
     btnChange.Click += (s, e) => { FlushComment(); H.ChangingSource = true; H.Action = "ChangeSource"; Ev.Raise(); };   // #92: the Revit API call (reopen with the dialog) runs in the ExternalEvent handler
     tip.SetToolTip(btnChange, "Back to the source dialog: choose another folder or report, or another source (clash report / viewpoints / Revizto).");
@@ -272,7 +273,8 @@ public class NavForm : WF.Form {
       string st = StKeys[cmbSt.SelectedIndex];
       NavData.SetState(H.Cams[curN - 1], st, null);
       ShowDoneInfo(H.Cams[curN - 1]);
-      if (st == "closed" && WF.MessageBox.Show(this, "Marked as Closed.\n\nSave the solved snapshot now (same camera as the VP view)?", "BIMRadar Clash Viewer", WF.MessageBoxButtons.YesNo, WF.MessageBoxIcon.Question) == WF.DialogResult.Yes)
+      if (st == "closed" && isClash) { if (!snapArmed) SnapClick(); }   // #100: clash: prepare the view, then Capture view
+      else if (st == "closed" && WF.MessageBox.Show(this, "Marked as Closed.\n\nSave the solved snapshot now (same camera as the VP view)?", "BIMRadar Clash Viewer", WF.MessageBoxButtons.YesNo, WF.MessageBoxIcon.Question) == WF.DialogResult.Yes)
         Go("Snapshot", 0);
     };
     // comment: type, then Post (or Enter); Edit re-opens a posted comment. Text not posted is still kept when moving on.
@@ -565,7 +567,28 @@ public class NavForm : WF.Form {
   public void GoNext() { Go("Next", 0); }
   public void GoPrevious() { Go("Prev", 0); }
 
+  // #100: clash snapshot in two clicks: 1) hint + button becomes "Capture view" (owner sets the camera in any view), 2) copy the active view.
+  bool snapArmed;
+  void SnapClick() {
+    if (!isClash) { Go("Snapshot", 0); return; }
+    if (!snapArmed) {
+      snapArmed = true;
+      btnSnap.Text = "Capture view"; btnSnap.BackColor = SD.Color.FromArgb(255, 230, 140);
+      lblInfo.ForeColor = SD.Color.FromArgb(90, 60, 0);
+      lblInfo.Text = "Set the Revit view as the solved picture should look (orbit, zoom, pan; any view, e.g. the WIP copy). Then click Capture view. The whole view is saved as you see it. Esc cancels.";
+      return;
+    }
+    DisarmSnap();
+    Go("Snapshot", 0);
+  }
+  void DisarmSnap() {
+    if (!snapArmed) return;
+    snapArmed = false;
+    btnSnap.Text = "Save snapshot"; btnSnap.BackColor = SD.SystemColors.Control; btnSnap.UseVisualStyleBackColor = true;
+  }
+
   void Go(string action, int idx) {
+    if (action != "Snapshot" && snapArmed) { DisarmSnap(); lblInfo.Text = ""; }
     if (action != "Goto" && action != "Snapshot" && action != "CheckAll" && action != "ToggleColors" && EnsureFilter()) return; // model changed: already jumped to its first item
     H.Action = action; H.GoTo = idx;
     H.UseBox = chk.Checked; H.BoxM = (double)num.Value;
@@ -576,7 +599,8 @@ public class NavForm : WF.Form {
     if ((ActiveControl is WF.TextBoxBase) && (keyData == WF.Keys.Right || keyData == WF.Keys.Left || keyData == WF.Keys.PageDown || keyData == WF.Keys.PageUp)) return base.ProcessCmdKey(ref msg, keyData);
     if (keyData == WF.Keys.Right || keyData == WF.Keys.PageDown) { Go("Next", 0); return true; }
     if (keyData == WF.Keys.Left || keyData == WF.Keys.PageUp) { Go("Prev", 0); return true; }
-    if (keyData == (WF.Keys.Control | WF.Keys.S)) { Go("Snapshot", 0); return true; }
+    if (keyData == (WF.Keys.Control | WF.Keys.S)) { SnapClick(); return true; }
+    if (keyData == WF.Keys.Escape && snapArmed) { DisarmSnap(); lblInfo.Text = ""; return true; }
     return base.ProcessCmdKey(ref msg, keyData);
   }
 

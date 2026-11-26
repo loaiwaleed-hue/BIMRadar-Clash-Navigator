@@ -730,11 +730,17 @@ public class NavHandler : IExternalEventHandler {
           if (Form != null && !Form.IsDisposed) Form.ShowOtherModel(Cams[cur - 1].Model, doc.Title);
           return;
         }
+        if (cur >= 1 && cur <= count && Cams[cur - 1].IsClash) {   // #100: clash: copy the active view as the owner set it
+          string shot = CaptureView(uidoc, Cams[cur - 1]);
+          Cur = cur;
+          if (Form != null && !Form.IsDisposed) { Form.Sync(cur); Form.ShowSaved(shot); }
+          return;
+        }
         if (tv == null || cur < 1 || cur > count) {
           if (Form != null && !Form.IsDisposed) Form.ShowError("Open a VP view first (click Next or Previous), then save the snapshot.");
           return;
         }
-        string saved = SaveSnapshot(doc, tv, Cams[cur - 1], uidoc);
+        string saved = SaveSnapshot(doc, tv, Cams[cur - 1]);
         Cur = cur;
         if (Form != null && !Form.IsDisposed) { Form.Sync(cur); Form.ShowSaved(saved); }
         return;
@@ -894,35 +900,47 @@ public class NavHandler : IExternalEventHandler {
   }
 
   // #97: exports the VP view at high resolution, auto-crops to the visible content (+12% margin) and saves it at the source picture's shape.
-  // #99: Navisworks clash: copy what the user sees in the Revit view (same camera, shaded), the part the window does not cover,
-  // centred at the picture's shape. UIView.GetWindowRectangle / UIDocument.RefreshActiveView exist in Revit 2022-2027. Null when not possible.
-  SD.Bitmap ScreenSnap(UIDocument uidoc, View3D v, double aspect) {
+  // #100: Navisworks clash: the owner sets the camera himself (any view, e.g. the WIP copy), then the whole active Revit view is copied
+  // from the screen, the Clash Viewer window hidden meanwhile. UIView.GetWindowRectangle / UIDocument.RefreshActiveView exist in Revit 2022-2027.
+  string CaptureView(UIDocument uidoc, VpCam c) {
+    if (string.IsNullOrWhiteSpace(PicDir)) throw new Exception("No picture folder is set.");
+    var av = uidoc.ActiveView;
+    var uiv = av == null ? null : uidoc.GetOpenUIViews().FirstOrDefault(u => u.ViewId == av.Id);
+    if (uiv == null) throw new Exception("No active view to capture.");
+    System.IO.Directory.CreateDirectory(PicDir);
+    bool shown = Form != null && !Form.IsDisposed && Form.Visible;
     try {
-      if (uidoc == null || uidoc.ActiveView == null || uidoc.ActiveView.Id != v.Id || aspect <= 0.01) return null;
-      var uiv = uidoc.GetOpenUIViews().FirstOrDefault(u => u.ViewId == v.Id);
-      if (uiv == null) return null;
+      if (shown) Form.Hide();
       uidoc.RefreshActiveView();
-      WF.Application.DoEvents();
+      for (int i = 0; i < 4; i++) { WF.Application.DoEvents(); System.Threading.Thread.Sleep(60); }
       var wr = uiv.GetWindowRectangle();
-      int l = wr.Left + 4, t = wr.Top + 4, r = wr.Right - 4, b = wr.Bottom - 4;
-      if (Form != null && !Form.IsDisposed && Form.Visible && Form.WindowState != WF.FormWindowState.Minimized) {
-        var fr = Form.Bounds;
-        bool overlap = fr.Right > l && fr.Left < r && fr.Bottom > t && fr.Top < b;
-        if (overlap) {
-          if ((fr.Left + fr.Right) / 2.0 < (l + r) / 2.0) l = Math.Max(l, fr.Right + 4); else r = Math.Min(r, fr.Left - 4);
+      int l = wr.Left + 2, t = wr.Top + 2, w = wr.Right - wr.Left - 4, h = wr.Bottom - wr.Top - 4;
+      if (w < 100 || h < 100) throw new Exception("The view is too small or not visible on screen.");
+      double k = Math.Min(1.0, 1600.0 / Math.Max(w, h));
+      int ow = (int)Math.Round(w * k), oh = (int)Math.Round(h * k);
+      string dest = NavData.AfterPath(PicDir, c);
+      string tmpOut = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "vpnav_" + System.Guid.NewGuid().ToString("N") + ".jpg");
+      using (var shot = new SD.Bitmap(w, h, SD.Imaging.PixelFormat.Format32bppArgb)) {
+        using (var gs = SD.Graphics.FromImage(shot)) gs.CopyFromScreen(l, t, 0, 0, new SD.Size(w, h));
+        using (var bmp = new SD.Bitmap(ow, oh))
+        using (var g = SD.Graphics.FromImage(bmp)) {
+          g.InterpolationMode = SD.Drawing2D.InterpolationMode.HighQualityBicubic;
+          g.DrawImage(shot, new SD.Rectangle(0, 0, ow, oh));
+          var enc = SD.Imaging.ImageCodecInfo.GetImageEncoders().First(e => e.FormatID == SD.Imaging.ImageFormat.Jpeg.Guid);
+          var ps = new SD.Imaging.EncoderParameters(1);
+          ps.Param[0] = new SD.Imaging.EncoderParameter(SD.Imaging.Encoder.Quality, 92L);
+          bmp.Save(tmpOut, enc, ps);
         }
       }
-      int w = r - l, h = b - t;
-      if (w < 150 || h < 150) return null;
-      int cw = w, ch = (int)Math.Round(w / aspect);
-      if (ch > h) { ch = h; cw = (int)Math.Round(h * aspect); }
-      var bmp = new SD.Bitmap(cw, ch, SD.Imaging.PixelFormat.Format32bppArgb);
-      using (var g = SD.Graphics.FromImage(bmp)) g.CopyFromScreen(l + (w - cw) / 2, t + (h - ch) / 2, 0, 0, new SD.Size(cw, ch));
-      return bmp;
-    } catch (Exception) { return null; }
+      System.IO.File.Copy(tmpOut, dest, true);
+      try { System.IO.File.Delete(tmpOut); } catch (Exception) { }
+      return dest;
+    } finally {
+      if (shown && Form != null && !Form.IsDisposed) Form.Show();
+    }
   }
 
-  string SaveSnapshot(Document doc, View3D v, VpCam c, UIDocument uidoc = null) {
+  string SaveSnapshot(Document doc, View3D v, VpCam c) {
     if (string.IsNullOrWhiteSpace(PicDir)) throw new Exception("No picture folder is set.");
     System.IO.Directory.CreateDirectory(PicDir);
     string tmp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "vpnav_" + System.Guid.NewGuid().ToString("N"));
@@ -932,25 +950,6 @@ public class NavHandler : IExternalEventHandler {
       using (var before = NavData.LoadImageNoLock(NavData.BeforePath(PicDir, c))) {
         if (before != null) { double k = 1024.0 / Math.Max(before.Width, before.Height); outW = (int)Math.Round(before.Width * k); outH = (int)Math.Round(before.Height * k); }
         else { double asp = c.Aspect > 0.1 ? c.Aspect : 1.0; outH = (int)Math.Round(outW / asp); }
-      }
-      if (c.IsClash) {   // #99: Navisworks clash: the on-screen picture; falls back to the export below
-        using (var shot = ScreenSnap(uidoc, v, (double)outW / outH)) {
-          if (shot != null) {
-            string dest0 = NavData.AfterPath(PicDir, c);
-            string tmp0 = System.IO.Path.Combine(tmp, "out.jpg");
-            using (var bmp0 = new SD.Bitmap(outW, outH))
-            using (var g0 = SD.Graphics.FromImage(bmp0)) {
-              g0.InterpolationMode = SD.Drawing2D.InterpolationMode.HighQualityBicubic;
-              g0.DrawImage(shot, new SD.Rectangle(0, 0, outW, outH));
-              var enc0 = SD.Imaging.ImageCodecInfo.GetImageEncoders().First(e => e.FormatID == SD.Imaging.ImageFormat.Jpeg.Guid);
-              var ps0 = new SD.Imaging.EncoderParameters(1);
-              ps0.Param[0] = new SD.Imaging.EncoderParameter(SD.Imaging.Encoder.Quality, 92L);
-              bmp0.Save(tmp0, enc0, ps0);
-            }
-            System.IO.File.Copy(tmp0, dest0, true);
-            return dest0;
-          }
-        }
       }
       var o = new ImageExportOptions();
       o.ExportRange = ExportRange.SetOfViews;
